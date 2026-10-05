@@ -1,26 +1,276 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design tokens. Brand values mirror the Site Tracker mobile app
+ * (src/constants/theme.ts there): primary blue #1c4ff0, ink navy #0b0e1c,
+ * success/warning/danger and the "stale" grey. Components use these through
+ * Tailwind classes (bg-primary, text-success, ...) — never raw hex.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --radius: 0.875rem;
+
+  --background: #f4f5fa;
+  --foreground: #0d0f1a;
+  --card: #ffffff;
+  --card-foreground: #0d0f1a;
+  --popover: #ffffff;
+  --popover-foreground: #0d0f1a;
+  --primary: #1c4ff0;
+  --primary-foreground: #ffffff;
+  --primary-bright: #4f7bff;
+  --primary-deep: #0a2ba8;
+  --secondary: #eef1f9;
+  --secondary-foreground: #0d0f1a;
+  --muted: #eef0f6;
+  --muted-foreground: #5c6079;
+  --faint: #8b8fa6;
+  --accent: #e9eefd;
+  --accent-foreground: #0a2ba8;
+  --destructive: #d93025;
+  --border: #e7e9f2;
+  --input: #dfe2ee;
+  --ring: #4f7bff;
+
+  --success: #0f9d58;
+  --success-soft: #e5f7ed;
+  --warning: #e2670f;
+  --warning-soft: #fdefe1;
+  --danger: #d93025;
+  --danger-soft: #fce8e6;
+  --stale: #9aa0b0;
+  --stale-soft: #eef0f4;
+  --ink: #0b0e1c;
+  --ink-raised: #141830;
+
+  --chart-1: #1c4ff0;
+  --chart-2: #0f9d58;
+  --chart-3: #e2670f;
+  --chart-4: #a142f4;
+  --chart-5: #12b5cb;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0d0f1a;
+  --sidebar-primary: #1c4ff0;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef2fd;
+  --sidebar-accent-foreground: #0a2ba8;
+  --sidebar-border: #e7e9f2;
+  --sidebar-ring: #4f7bff;
+
+  --shadow-card: 0 1px 2px rgb(11 13 22 / 0.04), 0 4px 16px -4px rgb(11 13 22 / 0.06);
+  --shadow-lift: 0 2px 4px rgb(11 13 22 / 0.05), 0 18px 40px -12px rgb(11 13 22 / 0.18);
+  --shadow-glow: 0 12px 32px -10px rgb(28 79 240 / 0.55);
+  --grid-line: rgb(28 79 240 / 0.08);
+}
+
+.dark {
+  --background: #080a14;
+  --foreground: #eef0f8;
+  --card: #10131f;
+  --card-foreground: #eef0f8;
+  --popover: #141830;
+  --popover-foreground: #eef0f8;
+  --primary: #4f7bff;
+  --primary-foreground: #ffffff;
+  --primary-bright: #7d9dff;
+  --primary-deep: #1c4ff0;
+  --secondary: #181c2c;
+  --secondary-foreground: #eef0f8;
+  --muted: #171a28;
+  --muted-foreground: #9a9fb8;
+  --faint: #6c7190;
+  --accent: #1a2244;
+  --accent-foreground: #b7c8ff;
+  --destructive: #f2675d;
+  --border: #20253a;
+  --input: #272c44;
+  --ring: #4f7bff;
+
+  --success: #2fc27a;
+  --success-soft: rgb(47 194 122 / 0.14);
+  --warning: #ff9d4d;
+  --warning-soft: rgb(255 157 77 / 0.14);
+  --danger: #f2675d;
+  --danger-soft: rgb(242 103 93 / 0.15);
+  --stale: #7d8399;
+  --stale-soft: rgb(125 131 153 / 0.16);
+  --ink: #05060d;
+  --ink-raised: #10142a;
+
+  --chart-1: #4f7bff;
+  --chart-2: #2fc27a;
+  --chart-3: #ff9d4d;
+  --chart-4: #b57bff;
+  --chart-5: #3fd0e2;
+
+  --sidebar: #0c0f1a;
+  --sidebar-foreground: #eef0f8;
+  --sidebar-primary: #4f7bff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #161c34;
+  --sidebar-accent-foreground: #c9d6ff;
+  --sidebar-border: #1c2135;
+  --sidebar-ring: #4f7bff;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px -8px rgb(0 0 0 / 0.5);
+  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.4), 0 22px 44px -14px rgb(0 0 0 / 0.7);
+  --shadow-glow: 0 12px 36px -10px rgb(79 123 255 / 0.6);
+  --grid-line: rgb(125 157 255 / 0.07);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-jakarta);
+  --font-heading: var(--font-jakarta);
   --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-bright: var(--primary-bright);
+  --color-primary-deep: var(--primary-deep);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-stale: var(--stale);
+  --color-stale-soft: var(--stale-soft);
+  --color-ink: var(--ink);
+  --color-ink-raised: var(--ink-raised);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.25);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-3xl: calc(var(--radius) * 2);
+  --shadow-card: var(--shadow-card);
+  --shadow-lift: var(--shadow-lift);
+  --shadow-glow: var(--shadow-glow);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 25%, transparent);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .surface {
+    background: var(--card);
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border);
+  }
+  .bg-grid {
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  .bg-hero {
+    background:
+      radial-gradient(120% 120% at 100% 0%, color-mix(in oklab, var(--primary-bright) 55%, transparent) 0%, transparent 55%),
+      linear-gradient(135deg, var(--primary) 0%, var(--primary-deep) 100%);
+  }
+  .bg-ink-hero {
+    background:
+      radial-gradient(90% 120% at 100% 0%, color-mix(in oklab, var(--primary) 45%, transparent) 0%, transparent 60%),
+      linear-gradient(160deg, var(--ink-raised) 0%, var(--ink) 100%);
+  }
+  .text-gradient {
+    background: linear-gradient(120deg, var(--primary) 0%, var(--chart-4) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--input) transparent;
+  }
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--card) 70%, transparent), transparent);
+    animation: shimmer 1.4s infinite;
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes ping-soft {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  80%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.animate-ping-soft {
+  animation: ping-soft 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-ping-soft,
+  .shimmer::after {
+    animation: none;
+  }
 }
