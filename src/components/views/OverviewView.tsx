@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { useAdmin } from "@/components/auth/AuthProvider";
 import { AttendanceTrend } from "@/components/charts/AttendanceTrend";
 import { BarCompare } from "@/components/charts/BarCompare";
 import { ActivityFeed } from "@/components/domain/ActivityFeed";
@@ -21,8 +22,8 @@ import { CountUp, Stagger, StaggerItem } from "@/components/motion";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { formatHours } from "@/lib/format";
 import { attendanceFor, dailyStats, lastNDays, needsAttention, presenceCounts } from "@/lib/insights";
-import { DAY, NOW, istDayStart } from "@/lib/mock/data";
-import { useDemoStore } from "@/lib/store";
+import { DAY, istDayStart } from "@/lib/time";
+import { useLiveStore, useNow } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const ATTENTION_ICON = { idle: Clock3, battery: BatteryLow, invited: MailQuestion, offline: Clock3 };
@@ -33,14 +34,16 @@ const ATTENTION_TONE = {
   offline: "bg-stale-soft text-muted-foreground",
 };
 
-function greeting() {
-  const h = (new Date(NOW).getUTCHours() + 5.5) % 24;
+function greeting(now: number) {
+  const h = (new Date(now).getUTCHours() + 5.5) % 24;
   return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 }
 
 export function OverviewView() {
-  const { crew, sites, sessions, photos, events } = useDemoStore();
+  const { crew, sites, sessions, photos, events } = useLiveStore();
   const { openAddCrew, openCreateSite } = useDialogs();
+  const now = useNow();
+  const admin = useAdmin();
   const [range, setRange] = useState<"7" | "14">("7");
   const [openPhoto, setOpenPhoto] = useState<string | null>(null);
 
@@ -52,7 +55,7 @@ export function OverviewView() {
     const sum = (xs: typeof days, k: "hours" | "photos") => xs.reduce((s, d) => s + d[k], 0);
     const change = (a: number, b: number) => (b === 0 ? 0 : (a - b) / b);
 
-    const todayStart = istDayStart(NOW);
+    const todayStart = istDayStart(now);
     const workers = crew.filter(c => c.status !== "invited" && c.status !== "deactivated");
     const todayCells = workers.map(w => attendanceFor(w.id, sessions, [todayStart])[0]).filter(c => c.firstIn != null);
     const onTime = todayCells.length ? todayCells.filter(c => !c.late).length / todayCells.length : 0;
@@ -65,7 +68,7 @@ export function OverviewView() {
       onTime,
       arrivedToday: todayCells.length,
     };
-  }, [crew, sessions, photos]);
+  }, [crew, sessions, photos, now]);
 
   const counts = presenceCounts(crew);
   const attention = needsAttention(crew);
@@ -87,7 +90,7 @@ export function OverviewView() {
   return (
     <>
       <PageHeader
-        eyebrow={`${greeting()}, Meera`}
+        eyebrow={`${greeting(now)}, ${admin.profile.name.split(" ")[0]}`}
         title={
           <>
             Your sites, <span className="text-gradient">live</span>
@@ -287,8 +290,8 @@ export function OverviewView() {
                 const here = crew.filter(c => c.currentSiteId === site.id && (c.status === "online" || c.status === "idle"));
                 const assigned = crew.filter(c => c.siteIds.includes(site.id) && c.status !== "deactivated").length;
                 const hoursToday = sessions
-                  .filter(s => s.siteId === site.id && s.start >= istDayStart(NOW))
-                  .reduce((sum, s) => sum + ((s.end ?? NOW) - s.start), 0);
+                  .filter(s => s.siteId === site.id && s.start >= istDayStart(now))
+                  .reduce((sum, s) => sum + ((s.end ?? now) - s.start), 0);
                 return (
                   <motion.div key={site.id} whileHover={{ y: -3 }} transition={{ type: "spring", stiffness: 400, damping: 26 }}>
                     <Link
@@ -300,7 +303,7 @@ export function OverviewView() {
                         <span className="text-[11px] font-bold text-faint">{site.code}</span>
                       </div>
                       <div className="mt-3 line-clamp-1 font-bold">{site.name}</div>
-                      <div className="text-xs text-muted-foreground">{site.city}</div>
+                      <div className="text-xs text-muted-foreground">{site.manager || site.code}</div>
                       <div className="mt-4 flex items-end justify-between">
                         <div>
                           <div className="text-2xl font-extrabold tracking-tight">
@@ -350,7 +353,7 @@ export function OverviewView() {
             }
           >
             <div className="max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
-              <ActivityFeed events={events.filter(e => e.at > NOW - DAY).slice(0, 10)} compact />
+              <ActivityFeed events={events.filter(e => e.at > now - DAY).slice(0, 10)} compact />
             </div>
           </Panel>
         </StaggerItem>

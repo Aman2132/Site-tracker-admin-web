@@ -1,10 +1,9 @@
 "use client";
 
-import { ArrowLeft, Building2, CalendarDays, Clock, Crosshair, ImageIcon, MapPin, Radius, UserPlus, UserRound, Users } from "lucide-react";
+import { ArrowLeft, Building2, CalendarDays, ChevronDown, Clock, Crosshair, ImageIcon, UserPlus, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { BarCompare } from "@/components/charts/BarCompare";
 import { ActivityFeed } from "@/components/domain/ActivityFeed";
@@ -13,21 +12,31 @@ import { Lightbox } from "@/components/domain/Lightbox";
 import { EmptyState, Panel } from "@/components/domain/Panel";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
 import { PhotoThumb } from "@/components/domain/PhotoThumb";
-import { SiteMap } from "@/components/domain/SiteMap";
+import { CrewMap } from "@/components/domain/CrewMap";
 import { SiteStatusBadge } from "@/components/domain/SiteStatusBadge";
 import { StatusChip } from "@/components/domain/StatusDot";
 import { useDialogs } from "@/components/layout/DialogsProvider";
 import { CountUp, Stagger, StaggerItem } from "@/components/motion";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { formatDate, formatHours, formatWeekday, percent, timeAgo } from "@/lib/format";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { formatDate, formatHours, formatWeekday, timeAgo } from "@/lib/format";
 import { hoursOnDay, lastNDays } from "@/lib/insights";
-import { DAY, HOUR, NOW, istDayStart } from "@/lib/mock/data";
-import { useDemoStore } from "@/lib/store";
+import { DAY, HOUR, istDayStart } from "@/lib/time";
+import { attempt, useLiveStore, useNow } from "@/lib/store";
 import { useTarget } from "@/lib/useTarget";
 import { cn } from "@/lib/utils";
 
+import type { SiteStatus } from "@/types/domain";
+
 export function SiteDetailView({ id }: { id: string }) {
-  const { sites, crew, sessions, photos, events } = useDemoStore();
+  const { sites, crew, sessions, photos, events, setSiteStatus } = useLiveStore();
+  const now = useNow();
   const { openAddCrew } = useDialogs();
   const assign = useTarget();
   const [openPhoto, setOpenPhoto] = useState<string | null>(null);
@@ -37,7 +46,7 @@ export function SiteDetailView({ id }: { id: string }) {
     if (!site) return null;
     const siteSessions = sessions.filter(s => s.siteId === site.id);
     const days = lastNDays(7);
-    const today = istDayStart(NOW);
+    const today = istDayStart(now);
     const sitePhotos = photos.filter(p => p.siteId === site.id);
     return {
       perDay: days.map(day => ({
@@ -51,9 +60,9 @@ export function SiteDetailView({ id }: { id: string }) {
       todayHoursBy: (personId: string) => hoursOnDay(siteSessions.filter(s => s.personId === personId), today),
       photos: sitePhotos,
       photosWeek: sitePhotos.filter(p => p.takenAt >= days[0]).length,
-      events: events.filter(e => e.siteId === site.id && e.at > NOW - 2 * DAY).slice(0, 14),
+      events: events.filter(e => e.siteId === site.id && e.at > now - 2 * DAY).slice(0, 14),
     };
-  }, [site, sessions, photos, events]);
+  }, [site, sessions, photos, events, now]);
 
   if (!site || !data) {
     return (
@@ -96,19 +105,32 @@ export function SiteDetailView({ id }: { id: string }) {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{site.name}</h1>
-                  <SiteStatusBadge status={site.status} />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger render={<button type="button" className="inline-flex items-center gap-1 rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Change status" />}>
+                      <SiteStatusBadge status={site.status} /> <ChevronDown className="size-3.5 text-muted-foreground" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-44">
+                      <DropdownMenuRadioGroup
+                        value={site.status}
+                        onValueChange={v => attempt("Updating status", () => setSiteStatus(site.id, v as SiteStatus))}
+                      >
+                        {(["planning", "active", "paused", "completed"] as const).map(status => (
+                          <DropdownMenuRadioItem key={status} value={status} className="capitalize">
+                            {status}
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                  <span className="inline-flex items-center gap-1.5"><MapPin className="size-4" /> {site.address}, {site.city}</span>
-                  <span className="inline-flex items-center gap-1.5"><UserRound className="size-4" /> {site.manager}</span>
+                  <span className="inline-flex items-center gap-1.5 font-mono text-xs">{site.code}</span>
+                  {site.manager && <span className="inline-flex items-center gap-1.5"><UserRound className="size-4" /> {site.manager}</span>}
                   <span className="inline-flex items-center gap-1.5"><CalendarDays className="size-4" /> Since {formatDate(site.startedAt)}</span>
                 </div>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="lg" className="rounded-xl bg-card" onClick={() => toast("Geofence editing", { description: "In the live version this opens the radius editor on the map." })}>
-                <Radius /> Edit geofence
-              </Button>
               <Button variant="outline" size="lg" className="rounded-xl bg-card" onClick={() => assign.show(site.id)}>
                 <Users /> Assign crew
               </Button>
@@ -121,7 +143,7 @@ export function SiteDetailView({ id }: { id: string }) {
 
         <StaggerItem className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {[
-            { label: "On site now", icon: Users, value: here.length, suffix: ` / ${assigned.length}` },
+            { label: "Working now", icon: Users, value: here.length, suffix: ` / ${assigned.length}` },
             { label: "Hours today", icon: Clock, value: data.hoursToday / HOUR, decimals: 1, suffix: "h" },
             { label: "Hours this week", icon: CalendarDays, value: data.hoursWeek / HOUR, decimals: 0, suffix: "h" },
             { label: "Photos this week", icon: ImageIcon, value: data.photosWeek },
@@ -138,28 +160,13 @@ export function SiteDetailView({ id }: { id: string }) {
         </StaggerItem>
 
         <StaggerItem className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
-          <Panel title="Live site map" description="Schematic view · hover a pin for details" bodyClassName="pt-4">
-            <SiteMap radius={site.radius} color={site.color} crew={here} className="w-full" />
-            <div className="mt-4">
-              <div className="mb-1.5 flex justify-between text-xs font-semibold">
-                <span className="text-muted-foreground">Construction progress</span>
-                <span>{percent(site.progress)}</span>
-              </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ backgroundColor: site.color }}
-                  initial={{ width: 0 }}
-                  animate={{ width: percent(site.progress) }}
-                  transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
-                />
-              </div>
-            </div>
+          <Panel title="Crew on the map" description="Last reported positions of the people assigned here" bodyClassName="pt-4">
+            <CrewMap crew={assigned} sites={sites} fitKey={site.id} className="h-[340px] w-full" />
           </Panel>
 
-          <Panel title="On site right now" description={`${here.length} people inside the ${site.radius} m fence`}>
+          <Panel title="Working now" description={`${here.length} checked in here`}>
             {here.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nobody is on site at the moment.</p>
+              <p className="text-sm text-muted-foreground">Nobody is checked in here at the moment.</p>
             ) : (
               <ul className="space-y-1.5">
                 {here.map((p, i) => (

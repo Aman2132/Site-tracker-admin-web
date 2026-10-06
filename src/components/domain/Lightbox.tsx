@@ -19,7 +19,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { Button, buttonVariants } from "@/components/ui/button";
-import { formatDateTime, formatDuration } from "@/lib/format";
+import { formatCoord, formatDateTime, formatDuration } from "@/lib/format";
 import { useLookups } from "@/lib/store";
 import { useMounted } from "@/lib/useMounted";
 import { cn } from "@/lib/utils";
@@ -113,6 +113,18 @@ export function Lightbox({
 function FullImage({ photo }: { photo: SitePhoto }) {
   const [fullLoaded, setFullLoaded] = useState(false);
   const ratio = photo.width / photo.height;
+  if (photo.mediaType === "video") {
+    return (
+      <motion.div
+        layoutId={`photo-${photo.id}`}
+        className="relative max-h-full overflow-hidden rounded-2xl bg-black shadow-2xl"
+        style={{ aspectRatio: ratio, height: ratio < 1 ? "100%" : undefined, width: ratio >= 1 ? "min(100%, 1200px)" : undefined }}
+        onClick={e => e.stopPropagation()}
+      >
+        <video key={photo.id} src={photo.fullUrl} controls autoPlay playsInline className="size-full object-contain" />
+      </motion.div>
+    );
+  }
   return (
     <motion.div
       layoutId={`photo-${photo.id}`}
@@ -141,13 +153,6 @@ function FullImage({ photo }: { photo: SitePhoto }) {
           </motion.div>
         )}
       </AnimatePresence>
-      {photo.mediaType === "video" && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="flex size-16 items-center justify-center rounded-full bg-white/20 ring-1 ring-white/40 backdrop-blur">
-            <Play className="size-7 fill-white text-white" />
-          </span>
-        </div>
-      )}
     </motion.div>
   );
 }
@@ -215,7 +220,7 @@ function MetaPanel({ photo, onClose }: { photo: SitePhoto; onClose: () => void }
                 <div className="text-xs text-muted-foreground">Taken by</div>
                 <div className="truncate font-bold">{person.name}</div>
                 <div className="truncate text-xs text-muted-foreground">
-                  {person.jobTitle} · {person.team}
+                  {[person.jobTitle, person.team].filter(Boolean).join(" · ")}
                 </div>
               </div>
             </Link>
@@ -249,8 +254,16 @@ function MetaPanel({ photo, onClose }: { photo: SitePhoto; onClose: () => void }
             </MetaRow>
             <MetaRow icon={MapPin} label="Coordinates">
               <span className="font-mono text-xs">
-                {photo.lat.toFixed(6)}° N, {photo.lng.toFixed(6)}° E
+                {formatCoord(photo.lat, photo.lng)}
               </span>
+              <a
+                href={`https://www.openstreetmap.org/?mlat=${photo.lat}&mlon=${photo.lng}#map=18/${photo.lat}/${photo.lng}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 block text-xs font-semibold text-primary hover:underline"
+              >
+                View on map
+              </a>
             </MetaRow>
             {photo.mediaType === "video" && (
               <MetaRow icon={Play} label="Length">

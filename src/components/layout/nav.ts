@@ -4,6 +4,7 @@ import {
   Building2,
   Images,
   LayoutDashboard,
+  Map,
   Settings,
   Users,
   type LucideIcon,
@@ -18,12 +19,13 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard, description: "Today at a glance" },
-  { href: "/sites", label: "Sites", icon: Building2, description: "Projects and geofences" },
+  { href: "/map", label: "Live map", icon: Map, description: "Where the crew is now" },
+  { href: "/sites", label: "Sites", icon: Building2, description: "Projects and their crew" },
   { href: "/crew", label: "Crew", icon: Users, description: "People, roles and assignments" },
   { href: "/photos", label: "Photos", icon: Images, description: "Geotagged site photos" },
   { href: "/attendance", label: "Attendance", icon: CalendarClock, description: "Online / offline history" },
   { href: "/activity", label: "Activity", icon: Activity, description: "Everything that happened" },
-  { href: "/settings", label: "Settings", icon: Settings, description: "Alerts, roles and profile" },
+  { href: "/settings", label: "Settings", icon: Settings, description: "Your account and appearance" },
 ];
 
 export function isActive(pathname: string, href: string) {

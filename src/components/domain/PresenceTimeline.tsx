@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { EASE_OUT } from "@/components/motion";
 import { formatDay, formatHours, formatTime, formatWeekday, formatDayMonth, istHourOfDay } from "@/lib/format";
 import { sessionEnd, type AttendanceCell } from "@/lib/insights";
-import { NOW } from "@/lib/mock/data";
+import { useNow } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const START_HOUR = 6;
@@ -35,6 +35,7 @@ export function TimelineRuler({ className }: { className?: string }) {
  * offline (paused, signed off, or no signal).
  */
 export function TimelineTrack({ cell, color = "var(--success)", delay = 0 }: { cell: AttendanceCell; color?: string; delay?: number }) {
+  const now = useNow();
   return (
     <div className="relative h-8 rounded-lg bg-muted/70">
       {/* hour gridlines */}
@@ -67,7 +68,7 @@ export function TimelineTrack({ cell, color = "var(--success)", delay = 0 }: { c
         );
       })}
       {cell.open && (
-        <span className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2" style={{ left: `${pos(NOW)}%` }}>
+        <span className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2" style={{ left: `${pos(now)}%` }}>
           <span className="absolute inset-0 animate-ping-soft rounded-full bg-success" />
           <span className="absolute inset-0.5 rounded-full bg-success ring-2 ring-card" />
         </span>

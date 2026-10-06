@@ -23,8 +23,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDay } from "@/lib/format";
-import { DAY, NOW, istDayStart } from "@/lib/mock/data";
-import { useDemoStore, useLookups } from "@/lib/store";
+import { DAY, istDayStart } from "@/lib/time";
+import { useLiveStore, useLookups, useNow } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 import type { SitePhoto } from "@/types/domain";
@@ -33,15 +33,16 @@ type Range = "today" | "7d" | "all";
 type Media = "all" | "photo" | "video";
 
 function dayLabel(day: number) {
-  const today = istDayStart(NOW);
+  const today = istDayStart(Date.now());
   if (day === today) return "Today";
   if (day === today - DAY) return "Yesterday";
   return formatDay(day);
 }
 
 export function PhotosView({ initialSite }: { initialSite?: string }) {
-  const { photos, sites, crew } = useDemoStore();
+  const { photos, sites, crew } = useLiveStore();
   const { personById } = useLookups();
+  const now = useNow();
   const [site, setSite] = useState<string>(initialSite && sites.some(s => s.id === initialSite) ? initialSite : "all");
   const [person, setPerson] = useState("all");
   const [range, setRange] = useState<Range>("7d");
@@ -50,7 +51,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
-    const today = istDayStart(NOW);
+    const today = istDayStart(now);
     const from = range === "today" ? today : range === "7d" ? today - 6 * DAY : 0;
     const q = query.trim().toLowerCase();
     return photos.filter(
@@ -61,7 +62,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
         (media === "all" || p.mediaType === media) &&
         (!q || p.task.toLowerCase().includes(q) || personById.get(p.personId)?.name.toLowerCase().includes(q))
     );
-  }, [photos, site, person, range, media, query, personById]);
+  }, [photos, site, person, range, media, query, personById, now]);
 
   const groups = useMemo(() => {
     const map = new Map<number, SitePhoto[]>();

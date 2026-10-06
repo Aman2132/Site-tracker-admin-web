@@ -3,13 +3,13 @@
 import {
   BatteryLow,
   Building2,
-  Clock3,
+  CircleDot,
   ImageUp,
   LogIn,
   LogOut,
-  MailPlus,
   Pause,
   Play,
+  UserCog,
   type LucideIcon,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -22,15 +22,15 @@ import { cn } from "@/lib/utils";
 import type { ActivityEvent, EventKind } from "@/types/domain";
 
 export const EVENT_META: Record<EventKind, { icon: LucideIcon; tone: string; label: string }> = {
-  arrive: { icon: LogIn, tone: "bg-success-soft text-success", label: "Arrivals" },
-  leave: { icon: LogOut, tone: "bg-stale-soft text-muted-foreground", label: "Departures" },
+  checkin: { icon: LogIn, tone: "bg-success-soft text-success", label: "Check-ins" },
+  checkout: { icon: LogOut, tone: "bg-stale-soft text-muted-foreground", label: "Check-outs" },
   upload: { icon: ImageUp, tone: "bg-accent text-primary", label: "Uploads" },
   battery: { icon: BatteryLow, tone: "bg-danger-soft text-danger", label: "Battery" },
   pause: { icon: Pause, tone: "bg-warning-soft text-warning", label: "Paused" },
   resume: { icon: Play, tone: "bg-success-soft text-success", label: "Resumed" },
-  idle: { icon: Clock3, tone: "bg-warning-soft text-warning", label: "Idle alerts" },
-  invite: { icon: MailPlus, tone: "bg-accent text-chart-4", label: "Invites" },
+  crew: { icon: UserCog, tone: "bg-accent text-chart-4", label: "Crew changes" },
   site: { icon: Building2, tone: "bg-accent text-primary", label: "Sites" },
+  other: { icon: CircleDot, tone: "bg-muted text-muted-foreground", label: "Other" },
 };
 
 export function ActivityFeed({

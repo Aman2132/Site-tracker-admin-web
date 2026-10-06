@@ -23,8 +23,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDay, formatDayMonth, formatHours, formatTime, formatWeekday } from "@/lib/format";
 import { attendanceFor, lastNDays, type AttendanceCell } from "@/lib/insights";
-import { HOUR, NOW, istDayStart } from "@/lib/mock/data";
-import { useDemoStore, useLookups } from "@/lib/store";
+import { HOUR, istDayStart } from "@/lib/time";
+import { useLiveStore, useLookups, useNow } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 /** A full shift; cells are shaded by how close they get to it. */
@@ -76,12 +76,13 @@ function HeatCell({ cell, delay }: { cell: AttendanceCell; delay: number }) {
 }
 
 export function AttendanceView() {
-  const { crew, sessions, sites } = useDemoStore();
+  const { crew, sessions, sites } = useLiveStore();
   const { siteById } = useLookups();
+  const now = useNow();
   const [mode, setMode] = useState<"grid" | "timeline">("grid");
   const [span, setSpan] = useState<"7" | "14">("7");
   const [site, setSite] = useState("all");
-  const [timelineDay, setTimelineDay] = useState(istDayStart(NOW));
+  const [timelineDay, setTimelineDay] = useState(() => istDayStart(now));
 
   const days = useMemo(() => lastNDays(Number(span)), [span]);
   const people = useMemo(
@@ -201,7 +202,7 @@ export function AttendanceView() {
             >
               <div />
               {days.map(d => (
-                <div key={d} className={cn("text-center text-xs leading-tight", d === istDayStart(NOW) ? "font-extrabold text-primary" : "font-semibold text-muted-foreground")}>
+                <div key={d} className={cn("text-center text-xs leading-tight", d === istDayStart(now) ? "font-extrabold text-primary" : "font-semibold text-muted-foreground")}>
                   <div>{formatWeekday(d)}</div>
                   <div className="text-[10px] opacity-75">{formatDayMonth(d)}</div>
                 </div>
