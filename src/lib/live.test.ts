@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { deriveCrew, settleSessions, toEvent, toPhoto } from "./live.ts";
-import { HOUR, MINUTE } from "./time.ts";
+import { DAY, HOUR, MINUTE, TZ_OFFSET, dayStart } from "./time.ts";
 
 const NOW = Date.UTC(2026, 9, 5, 10, 0);
 const person = { id: "p", name: "Pooja", role: "Helper", color: "#a142f4", appRole: "worker" as const };
@@ -68,4 +68,13 @@ test("events use the recorded type, else guess from legacy text", () => {
   assert.equal(toEvent("b", { text: "Pooja paused sharing", kind: "warn", at: 1 }, NOW).kind, "pause");
   assert.equal(toEvent("c", { text: "3 photos uploaded from Pooja", kind: "info", at: 1 }, NOW).kind, "upload");
   assert.equal(toEvent("d", { text: "mystery", kind: "info", at: null }, NOW).at, NOW);
+});
+
+test("days start at midnight Nepal time (UTC+5:45), not India time", () => {
+  assert.equal(TZ_OFFSET, 5.75 * HOUR);
+  // 18:15 UTC is exactly midnight in Nepal: it is the start of its own day...
+  const midnightNepal = Date.UTC(2026, 9, 5, 18, 15);
+  assert.equal(dayStart(midnightNepal), midnightNepal);
+  // ...and one minute earlier still belongs to the previous Nepal day.
+  assert.equal(dayStart(midnightNepal - MINUTE), midnightNepal - DAY);
 });

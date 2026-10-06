@@ -20,9 +20,9 @@ import { StatCard } from "@/components/domain/StatCard";
 import { useDialogs } from "@/components/layout/DialogsProvider";
 import { CountUp, Stagger, StaggerItem } from "@/components/motion";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { formatHours } from "@/lib/format";
+import { formatHours, hourOfDay } from "@/lib/format";
 import { attendanceFor, dailyStats, lastNDays, needsAttention, presenceCounts } from "@/lib/insights";
-import { DAY, istDayStart } from "@/lib/time";
+import { DAY, dayStart } from "@/lib/time";
 import { useLiveStore, useNow } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +35,7 @@ const ATTENTION_TONE = {
 };
 
 function greeting(now: number) {
-  const h = (new Date(now).getUTCHours() + 5.5) % 24;
+  const h = hourOfDay(now);
   return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 }
 
@@ -55,7 +55,7 @@ export function OverviewView() {
     const sum = (xs: typeof days, k: "hours" | "photos") => xs.reduce((s, d) => s + d[k], 0);
     const change = (a: number, b: number) => (b === 0 ? 0 : (a - b) / b);
 
-    const todayStart = istDayStart(now);
+    const todayStart = dayStart(now);
     const workers = crew.filter(c => c.status !== "invited" && c.status !== "deactivated");
     const todayCells = workers.map(w => attendanceFor(w.id, sessions, [todayStart])[0]).filter(c => c.firstIn != null);
     const onTime = todayCells.length ? todayCells.filter(c => !c.late).length / todayCells.length : 0;
@@ -290,7 +290,7 @@ export function OverviewView() {
                 const here = crew.filter(c => c.currentSiteId === site.id && (c.status === "online" || c.status === "idle"));
                 const assigned = crew.filter(c => c.siteIds.includes(site.id) && c.status !== "deactivated").length;
                 const hoursToday = sessions
-                  .filter(s => s.siteId === site.id && s.start >= istDayStart(now))
+                  .filter(s => s.siteId === site.id && s.start >= dayStart(now))
                   .reduce((sum, s) => sum + ((s.end ?? now) - s.start), 0);
                 return (
                   <motion.div key={site.id} whileHover={{ y: -3 }} transition={{ type: "spring", stiffness: 400, damping: 26 }}>

@@ -16,7 +16,7 @@ import { EASE_OUT } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { formatHours } from "@/lib/format";
 import { lastNDays } from "@/lib/insights";
-import { istDayStart } from "@/lib/time";
+import { dayStart } from "@/lib/time";
 import { useLiveStore, useNow } from "@/lib/store";
 
 import type { Site, SiteStatus } from "@/types/domain";
@@ -27,7 +27,7 @@ function useSiteSummaries() {
   const { sites, crew, sessions, photos } = useLiveStore();
   const now = useNow();
   return useMemo(() => {
-    const today = istDayStart(now);
+    const today = dayStart(now);
     const weekStart = lastNDays(7)[0];
     return sites.map(site => {
       const assigned = crew.filter(c => c.siteIds.includes(site.id) && c.status !== "deactivated");

@@ -32,7 +32,7 @@ import { PresenceTimeline } from "@/components/domain/PresenceTimeline";
 import { StatusChip } from "@/components/domain/StatusDot";
 import { CountUp, Stagger, StaggerItem } from "@/components/motion";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { formatClock, formatDate, formatWeekday, istHourOfDay, timeAgo } from "@/lib/format";
+import { formatClock, formatDate, formatWeekday, hourOfDay, timeAgo } from "@/lib/format";
 import { attendanceFor, lastNDays } from "@/lib/insights";
 import { HOUR } from "@/lib/time";
 import { attempt, useLiveStore } from "@/lib/store";
@@ -51,7 +51,7 @@ export function CrewProfileView({ id }: { id: string }) {
     const cells = attendanceFor(person.id, sessions, days14);
     const week = cells.slice(7);
     const present = cells.filter(c => c.sessions.length > 0);
-    const arrivals = present.map(c => istHourOfDay(c.firstIn!));
+    const arrivals = present.map(c => hourOfDay(c.firstIn!));
     const myPhotos = photos.filter(p => p.personId === person.id);
     const weekStart = days14[7];
     return {

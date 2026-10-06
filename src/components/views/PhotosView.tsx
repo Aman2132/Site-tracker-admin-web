@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDay } from "@/lib/format";
-import { DAY, istDayStart } from "@/lib/time";
+import { DAY, dayStart } from "@/lib/time";
 import { useLiveStore, useLookups, useNow } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +33,7 @@ type Range = "today" | "7d" | "all";
 type Media = "all" | "photo" | "video";
 
 function dayLabel(day: number) {
-  const today = istDayStart(Date.now());
+  const today = dayStart(Date.now());
   if (day === today) return "Today";
   if (day === today - DAY) return "Yesterday";
   return formatDay(day);
@@ -51,7 +51,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
-    const today = istDayStart(now);
+    const today = dayStart(now);
     const from = range === "today" ? today : range === "7d" ? today - 6 * DAY : 0;
     const q = query.trim().toLowerCase();
     return photos.filter(
@@ -67,7 +67,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
   const groups = useMemo(() => {
     const map = new Map<number, SitePhoto[]>();
     for (const p of filtered) {
-      const d = istDayStart(p.takenAt);
+      const d = dayStart(p.takenAt);
       map.set(d, [...(map.get(d) ?? []), p]);
     }
     return [...map.entries()].sort((a, b) => b[0] - a[0]);

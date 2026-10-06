@@ -45,7 +45,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatHours, timeAgo } from "@/lib/format";
 import { hoursOnDay } from "@/lib/insights";
-import { istDayStart } from "@/lib/time";
+import { dayStart } from "@/lib/time";
 import { attempt, useLiveStore, useLookups, useNow } from "@/lib/store";
 import { useTarget } from "@/lib/useTarget";
 
@@ -123,7 +123,7 @@ export function CrewView() {
   const [view, setView] = useState<"table" | "cards">("table");
 
   const hoursToday = useMemo(() => {
-    const today = istDayStart(now);
+    const today = dayStart(now);
     const map = new Map<string, number>();
     for (const c of crew) map.set(c.id, hoursOnDay(sessions.filter(s => s.personId === c.id), today));
     return map;

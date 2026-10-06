@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDay } from "@/lib/format";
-import { DAY, istDayStart } from "@/lib/time";
+import { DAY, dayStart } from "@/lib/time";
 import { useLiveStore, useLookups } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +25,7 @@ import type { ActivityEvent, EventKind } from "@/types/domain";
 const KIND_FILTERS: (EventKind | "all")[] = ["all", "checkin", "checkout", "upload", "battery", "pause", "resume", "crew", "site"];
 
 function dayLabel(day: number) {
-  const today = istDayStart(Date.now());
+  const today = dayStart(Date.now());
   if (day === today) return "Today";
   if (day === today - DAY) return "Yesterday";
   return formatDay(day);
@@ -45,7 +45,7 @@ export function ActivityView() {
   const groups = useMemo(() => {
     const map = new Map<number, ActivityEvent[]>();
     for (const e of filtered) {
-      const d = istDayStart(e.at);
+      const d = dayStart(e.at);
       map.set(d, [...(map.get(d) ?? []), e]);
     }
     return [...map.entries()].sort((a, b) => b[0] - a[0]);

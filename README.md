@@ -62,3 +62,11 @@ event mapping). It is the file to read first.
   with no profile; remove it in the Firebase console.
 - Alert rules, shift hours and photo retention are not here: nothing would act
   on them without a scheduled sender.
+
+## Saved copy in the browser
+
+Firestore data is cached in the browser (IndexedDB), so a reload re-reads only
+what changed (within about 30 minutes of the last visit) instead of every
+document. The saved copy is wiped when you sign out. The cache is set up in
+`src/lib/firebase.ts`; the sessions query uses a cutoff rounded to the start of
+the day (`src/lib/store.tsx`) so the saved copy can resume it.

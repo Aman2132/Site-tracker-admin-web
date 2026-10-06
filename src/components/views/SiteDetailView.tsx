@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatDate, formatHours, formatWeekday, timeAgo } from "@/lib/format";
 import { hoursOnDay, lastNDays } from "@/lib/insights";
-import { DAY, HOUR, istDayStart } from "@/lib/time";
+import { DAY, HOUR, dayStart } from "@/lib/time";
 import { attempt, useLiveStore, useNow } from "@/lib/store";
 import { useTarget } from "@/lib/useTarget";
 import { cn } from "@/lib/utils";
@@ -46,7 +46,7 @@ export function SiteDetailView({ id }: { id: string }) {
     if (!site) return null;
     const siteSessions = sessions.filter(s => s.siteId === site.id);
     const days = lastNDays(7);
-    const today = istDayStart(now);
+    const today = dayStart(now);
     const sitePhotos = photos.filter(p => p.siteId === site.id);
     return {
       perDay: days.map(day => ({

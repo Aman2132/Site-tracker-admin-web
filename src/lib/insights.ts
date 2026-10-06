@@ -1,5 +1,5 @@
-import { istHourOfDay, timeAgo } from "@/lib/format";
-import { DAY, HOUR, istDayStart } from "@/lib/time";
+import { hourOfDay, timeAgo } from "@/lib/format";
+import { DAY, HOUR, dayStart } from "@/lib/time";
 
 import type { CrewMember, PresenceSession, SitePhoto } from "@/types/domain";
 
@@ -9,7 +9,7 @@ import type { CrewMember, PresenceSession, SitePhoto } from "@/types/domain";
  */
 
 export const LOW_BATTERY = 0.2;
-/** Arriving after this IST hour counts as late on the attendance grid. */
+/** Arriving after this hour (Nepal time) counts as late on the attendance grid. */
 export const LATE_AFTER_HOUR = 9.25;
 
 export const sessionEnd = (s: PresenceSession) => s.end ?? Date.now();
@@ -21,7 +21,7 @@ function overlap(s: PresenceSession, from: number, to: number) {
 }
 
 export function lastNDays(n: number): number[] {
-  const today = istDayStart(Date.now());
+  const today = dayStart(Date.now());
   return Array.from({ length: n }, (_, i) => today - (n - 1 - i) * DAY);
 }
 
@@ -74,7 +74,7 @@ export function attendanceFor(personId: string, sessions: PresenceSession[], day
       workedMs: hoursOnDay(todays, day),
       firstIn,
       lastOut: last ? last.end : undefined,
-      late: firstIn != null && istHourOfDay(firstIn) > LATE_AFTER_HOUR,
+      late: firstIn != null && hourOfDay(firstIn) > LATE_AFTER_HOUR,
       open: todays.some(s => s.end == null),
     };
   });

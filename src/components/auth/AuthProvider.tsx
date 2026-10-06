@@ -4,7 +4,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebas
 import { doc, getDoc } from "firebase/firestore";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { firebase, HAS_FIREBASE_CONFIG } from "@/lib/firebase";
+import { clearSavedData, firebase, HAS_FIREBASE_CONFIG } from "@/lib/firebase";
 
 import type { PersonDoc } from "@/types/domain";
 
@@ -64,6 +64,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       signOutUser: async () => {
         await signOut(firebase().auth);
+        // Leave nothing behind in this browser, then start clean (the cleared Firestore can't be reused).
+        await clearSavedData();
+        window.location.reload();
       },
     }),
     [state]

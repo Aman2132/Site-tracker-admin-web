@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import * as admin from "./admin";
 import { firebase } from "./firebase";
 import { deriveCrew, settleSessions, toEvent, toPhoto, toSite } from "./live";
-import { DAY } from "./time";
+import { DAY, dayStart } from "./time";
 
 import type {
   ActivityEvent,
@@ -79,7 +79,9 @@ export function LiveStoreProvider({ children }: { children: ReactNode }) {
       console.warn(`[live] ${what} listener failed —`, e);
       setError(`Couldn't load ${what}: ${e.message}`);
     };
-    const since = Date.now() - SESSION_DAYS * DAY;
+    // Rounded to the start of the day: the query text is then identical all day, so the saved copy
+    // can resume it. A cutoff of "now" would be a different query on every load and re-read everything.
+    const since = dayStart(Date.now()) - SESSION_DAYS * DAY;
 
     const unsubscribers = [
       onSnapshot(

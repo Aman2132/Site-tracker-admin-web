@@ -9,6 +9,7 @@ import { Field, TextInput } from "@/components/domain/FormBits";
 import { PageHeader } from "@/components/domain/PageHeader";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
 import { Button } from "@/components/ui/button";
+import { TZ_LABEL } from "@/lib/time";
 import { useMounted } from "@/lib/useMounted";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +48,7 @@ export function SettingsView() {
               <TextInput value={admin.email} readOnly />
             </Field>
             <Field label="Time zone" hint="All times in the dashboard use this zone.">
-              <TextInput value="India Standard Time (UTC+5:30)" readOnly />
+              <TextInput value={TZ_LABEL} readOnly />
             </Field>
           </div>
           <div className="flex justify-end pb-6">

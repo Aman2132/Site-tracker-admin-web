@@ -1,15 +1,15 @@
-import { DAY, HOUR, IST_OFFSET, MINUTE } from "@/lib/time";
+import { DAY, HOUR, TZ_OFFSET, MINUTE } from "@/lib/time";
 
 /**
- * Dates render in IST, computed by hand rather than through Intl so the
+ * Dates render in Nepal time, computed by hand rather than through Intl so the
  * server render and every browser produce byte-identical strings (ICU
  * versions differ on commas and narrow spaces, which breaks hydration).
  */
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function ist(t: number) {
-  const d = new Date(t + IST_OFFSET);
+function local(t: number) {
+  const d = new Date(t + TZ_OFFSET);
   return {
     year: d.getUTCFullYear(),
     month: d.getUTCMonth(),
@@ -21,23 +21,23 @@ function ist(t: number) {
 }
 
 export function formatTime(t: number): string {
-  const { hour, minute } = ist(t);
+  const { hour, minute } = local(t);
   const h12 = hour % 12 === 0 ? 12 : hour % 12;
   return `${h12}:${String(minute).padStart(2, "0")} ${hour < 12 ? "am" : "pm"}`;
 }
 
-export const formatWeekday = (t: number) => WEEKDAYS[ist(t).weekday];
+export const formatWeekday = (t: number) => WEEKDAYS[local(t).weekday];
 export const formatDayMonth = (t: number) => {
-  const d = ist(t);
+  const d = local(t);
   return `${d.day} ${MONTHS[d.month]}`;
 };
 export const formatDay = (t: number) => `${formatWeekday(t)}, ${formatDayMonth(t)}`;
-export const formatDate = (t: number) => `${formatDayMonth(t)} ${ist(t).year}`;
+export const formatDate = (t: number) => `${formatDayMonth(t)} ${local(t).year}`;
 export const formatDateTime = (t: number) => `${formatDay(t)} · ${formatTime(t)}`;
 
-/** Hour-of-day in IST as a fraction, e.g. 15.5 for 3:30 pm. */
-export function istHourOfDay(t: number): number {
-  const { hour, minute } = ist(t);
+/** Hour-of-day in Nepal time as a fraction, e.g. 15.5 for 3:30 pm. */
+export function hourOfDay(t: number): number {
+  const { hour, minute } = local(t);
   return hour + minute / 60;
 }
 

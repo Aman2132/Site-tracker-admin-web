@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EASE_OUT } from "@/components/motion";
-import { formatDay, formatHours, formatTime, formatWeekday, formatDayMonth, istHourOfDay } from "@/lib/format";
+import { formatDay, formatHours, formatTime, formatWeekday, formatDayMonth, hourOfDay } from "@/lib/format";
 import { sessionEnd, type AttendanceCell } from "@/lib/insights";
 import { useNow } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 const START_HOUR = 6;
 const END_HOUR = 22;
 const SPAN = END_HOUR - START_HOUR;
-const pos = (t: number) => Math.min(100, Math.max(0, ((istHourOfDay(t) - START_HOUR) / SPAN) * 100));
+const pos = (t: number) => Math.min(100, Math.max(0, ((hourOfDay(t) - START_HOUR) / SPAN) * 100));
 
 const END_LABEL = { "signed-off": "signed off", paused: "paused sharing", timeout: "lost signal" } as const;
 
