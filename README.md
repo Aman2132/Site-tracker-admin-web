@@ -1,69 +1,64 @@
-# Site Tracker — Admin Dashboard (static prototype)
+# Site Tracker — Admin Dashboard
 
-Web admin console for the Site Tracker mobile app: sites, crew, online/offline
-history, attendance and geotagged photos. **This build is static** — every
-number comes from a seeded mock dataset, nothing talks to Firebase or a server.
-It exists to agree the UX with the client before the backend is wired in.
+Web console for the Site Tracker mobile app. It reads the **same Firebase
+project** the app uses (Auth, Firestore, Realtime Database), live. Only an
+active **owner** account can sign in.
 
 ## Run it
 
 ```bash
 npm install
+# .env.local needs the Firebase web config (same project as the app):
+#   NEXT_PUBLIC_FIREBASE_API_KEY, _AUTH_DOMAIN, _PROJECT_ID,
+#   _MESSAGING_SENDER_ID, _APP_ID, _DATABASE_URL
 npm run dev        # http://localhost:3000
-npm run build      # production build (type-checks too)
+npm run build
 npm run lint
+npm test           # checks the presence / session derivations
 ```
+
+Deploy the latest `firestore.rules` from the app repo first
+(`firebase deploy --only firestore:rules`), or the dashboard shows permission
+errors: it relies on the `sessions` collection and the owner-writable
+`siteIds`, `email`, `phone`, `team` and `invitedAt` fields on `people`.
 
 ## What's in it
 
-| Page | What it shows |
+| Page | Shows |
 |---|---|
-| **Overview** | Live crew presence, hours/photos today vs last week, attendance trend, needs-attention list, per-site headcount, latest photos, live activity |
-| **Sites** / **Site detail** | Site cards with geofence preview and progress; detail page with live schematic map, who's on site, hours per day, assigned crew, photos, activity |
-| **Crew** / **Profile** | Filterable roster (online / idle / offline / invited / deactivated), CSV export, assign sites, deactivate; profile with 7-day online/offline timeline, time split (walk/drive/still), hours, photos |
-| **Photos** | Gallery filtered by site, person, date and media type, grouped by day; thumbnails first, full resolution in the lightbox (← → Esc) |
-| **Attendance** | Crew × day heat grid (late, lost signal, on shift now) and per-day timeline; timesheet CSV export |
-| **Activity** | Full event history, filterable by type and site |
-| **Settings** | Alert rules (idle 1 h, low battery, late arrival), role permissions preview, photo retention/storage, theme |
+| **Overview** | Who is online, hours and photos (today / week), attendance trend, needs-attention list, per-site headcount, latest photos, activity |
+| **Live map** | Last reported position of every person (OpenStreetMap, no key), filterable by site (crew assigned to it) and status |
+| **Sites** / detail | Projects, their crew, hours, photos, activity, a map of their crew; change status, assign crew |
+| **Crew** / profile | Roster, invite (creates the account and emails a set-password link), assign sites, deactivate; profile with 7-day online/offline timeline and last known location |
+| **Photos** | Every geotagged capture, filtered by site, person, date, type; thumbnails first, original on open |
+| **Attendance** | Crew × day grid and per-day timeline from check-in sessions; timesheet CSV |
+| **Activity** | Event history filtered by type and site |
 
-Global: **Add crew** (multi-step invite flow) and **Create site** (live geofence
-preview) open from anywhere; **Ctrl/⌘ K** command palette; light/dark/system
-theme; collapsible sidebar; responsive down to phone width.
+A site has a name, a status, a manager and its crew. It has **no location**:
+the dashboard never asks for one. Locations come from the phones (live
+positions, photo geotags).
 
-Creating a site or crew member updates in-memory state for the browser
-session only — a reload resets the demo.
+## Where the data comes from
 
-## Stack
+| Dashboard | Firebase |
+|---|---|
+| Crew | Firestore `people` + Realtime DB `positions/{uid}` |
+| Sites | Firestore `sites` |
+| Hours, attendance, timelines | Firestore `sessions` (written by the app at check-in / check-out / pause / resume) |
+| Photos | Firestore `photos` (files and thumbnails in Supabase Storage) |
+| Activity | Firestore `events` |
 
-Next.js 16 (App Router) · TypeScript strict · Tailwind CSS v4 · shadcn/ui on
-Base UI · Motion (animations) · Recharts · lucide-react · next-themes · sonner · cmdk.
-Brand colours and the Plus Jakarta Sans font match the mobile app.
+`src/lib/live.ts` turns those documents into what the views show (status:
+online / idle / offline / invited / deactivated, session end times, photo and
+event mapping). It is the file to read first.
 
-## Where things live
+## Limits
 
-```
-src/types/domain.ts        Domain model (mirrors the app, plus Site, sessions, siteId on photos)
-src/lib/mock/data.ts       The seeded demo dataset — the only file to replace with real data
-src/lib/insights.ts        Pure derivations: hours, attendance, presence, alerts
-src/lib/store.tsx          In-memory demo state + actions (addCrew, addSite, assign…)
-src/lib/format.ts          IST date/time formatting (hydration-safe)
-src/components/views/      One view per page
-src/components/domain/     App-specific pieces (SiteMap, Lightbox, PresenceTimeline, dialogs…)
-src/components/charts/     Sparkline, Donut, AttendanceTrend, BarCompare
-src/components/layout/     Shell, sidebar, top bar, command palette, theme toggle
-src/components/ui/         shadcn primitives
-```
-
-## Going from mock to real
-
-- Swap `src/lib/mock/data.ts` + `src/lib/store.tsx` for Firebase reads/listeners
-  (roster, sites, photos metadata, events) and RTDB positions.
-- **Sessions** (`PresenceSession`) don't exist in the backend yet: the worker app
-  needs to write a session on start/pause/resume/sign-off for the attendance and
-  timeline views to be real.
-- Photos need a `siteId` at capture and a phone-generated thumbnail; the
-  dashboard already loads `thumbUrl` first and `fullUrl` only in the lightbox.
-- Add crew → Firebase account creation + set-password email; push alerts need a
-  scheduled sender (Cloud Function or Cloudflare Worker).
-- The site map is a schematic stand-in; swap in Google Maps or MapLibre for real tiles.
-- Placeholder images come from picsum.photos, so they aren't construction photos.
+- Only the newest 300 photos and 300 events are loaded, and 15 days of sessions.
+- A session the worker never checked out of is closed in the dashboard from
+  their last position fix (or capped at 12 h); that end time is an estimate.
+- Photos taken before the app recorded a site show under "No site".
+- If creating a crew account fails halfway, the email can be left registered
+  with no profile; remove it in the Firebase console.
+- Alert rules, shift hours and photo retention are not here: nothing would act
+  on them without a scheduled sender.

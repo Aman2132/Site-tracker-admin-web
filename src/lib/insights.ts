@@ -1,21 +1,18 @@
-import { createRandom } from "@/lib/mock/random";
-import { DAY, HOUR, NOW, istDayStart } from "@/lib/mock/data";
-import { istHourOfDay } from "@/lib/format";
+import { istHourOfDay, timeAgo } from "@/lib/format";
+import { DAY, HOUR, istDayStart } from "@/lib/time";
 
 import type { CrewMember, PresenceSession, SitePhoto } from "@/types/domain";
 
 /**
- * Pure derivations over the dataset — the numbers the dashboard shows.
- * These are exactly the queries a real backend (or a Postgres view) would
- * need to answer, which is why they live apart from the components.
+ * Pure derivations over the live data — the numbers the dashboard shows.
+ * They live apart from the components so the views stay thin.
  */
 
 export const LOW_BATTERY = 0.2;
-export const IDLE_AFTER_MS = HOUR;
 /** Arriving after this IST hour counts as late on the attendance grid. */
 export const LATE_AFTER_HOUR = 9.25;
 
-export const sessionEnd = (s: PresenceSession) => s.end ?? NOW;
+export const sessionEnd = (s: PresenceSession) => s.end ?? Date.now();
 export const sessionLength = (s: PresenceSession) => sessionEnd(s) - s.start;
 
 /** Overlap of a session with [from, to). */
@@ -24,7 +21,7 @@ function overlap(s: PresenceSession, from: number, to: number) {
 }
 
 export function lastNDays(n: number): number[] {
-  const today = istDayStart(NOW);
+  const today = istDayStart(Date.now());
   return Array.from({ length: n }, (_, i) => today - (n - 1 - i) * DAY);
 }
 
@@ -92,29 +89,24 @@ export function presenceCounts(crew: CrewMember[]) {
 export interface AttentionItem {
   id: string;
   person: CrewMember;
-  reason: "idle" | "battery" | "invited" | "offline";
+  reason: "idle" | "battery" | "invited";
   detail: string;
 }
 
 export function needsAttention(crew: CrewMember[]): AttentionItem[] {
   const items: AttentionItem[] = [];
   for (const c of crew) {
-    if (c.status === "idle") items.push({ id: `${c.id}-idle`, person: c, reason: "idle", detail: "No update for over 1 hour" });
-    if (c.battery != null && c.battery <= LOW_BATTERY && c.status !== "deactivated")
+    if (c.status === "idle") {
+      items.push({
+        id: `${c.id}-idle`,
+        person: c,
+        reason: "idle",
+        detail: c.paused ? "Paused sharing" : `No update since ${timeAgo(c.lastSeenAt)}`,
+      });
+    }
+    if (c.battery != null && c.battery <= LOW_BATTERY && (c.status === "online" || c.status === "idle"))
       items.push({ id: `${c.id}-bat`, person: c, reason: "battery", detail: `Battery at ${Math.round(c.battery * 100)}%` });
-    if (c.status === "invited") items.push({ id: `${c.id}-inv`, person: c, reason: "invited", detail: "Hasn't accepted the invite yet" });
+    if (c.status === "invited") items.push({ id: `${c.id}-inv`, person: c, reason: "invited", detail: "Hasn't signed in yet" });
   }
   return items;
-}
-
-/** Share of tracked time spent walking / driving / still. Derived per person, deterministic. */
-export function activityMix(personId: string) {
-  const r = createRandom(personId.charCodeAt(0) * 131 + personId.charCodeAt(1));
-  const walk = r.between(0.3, 0.55);
-  const vehicle = r.between(0.05, 0.25);
-  return [
-    { kind: "walk", label: "Walking", value: walk },
-    { kind: "vehicle", label: "Driving", value: vehicle },
-    { kind: "still", label: "Still", value: 1 - walk - vehicle },
-  ] as const;
 }

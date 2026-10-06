@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { useDemoStore } from "@/lib/store";
+import { attempt, useLiveStore } from "@/lib/store";
 
 import { SelectCard, TextInput } from "./FormBits";
 import { PersonAvatar } from "./PersonAvatar";
@@ -22,13 +22,13 @@ export function AssignSitesSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { crew, sites, setPersonSites } = useDemoStore();
+  const { crew, sites, setPersonSites } = useLiveStore();
   const person = crew.find(c => c.id === personId);
   const [selected, setSelected] = useState<string[]>(person?.siteIds ?? []);
 
-  const save = () => {
+  const save = async () => {
     if (!person) return;
-    setPersonSites(person.id, selected);
+    if (!(await attempt("Updating sites", () => setPersonSites(person.id, selected)))) return;
     toast.success(`Sites updated for ${person.name}`, { description: `${selected.length} site${selected.length === 1 ? "" : "s"} assigned.` });
     onOpenChange(false);
   };
@@ -67,7 +67,7 @@ export function AssignSitesSheet({
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold">{site.name}</div>
                     <div className="text-xs text-muted-foreground capitalize">
-                      {site.city} · {site.status}
+                      {site.status}
                     </div>
                   </div>
                 </div>
@@ -98,7 +98,7 @@ export function AssignCrewSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { crew, sites, setAssignments } = useDemoStore();
+  const { crew, sites, setSiteCrew } = useLiveStore();
   const site = sites.find(s => s.id === siteId);
   const assignable = crew.filter(c => c.status !== "deactivated");
   const [selected, setSelected] = useState<string[]>(
@@ -107,9 +107,12 @@ export function AssignCrewSheet({
   const [query, setQuery] = useState("");
   const shown = assignable.filter(c => `${c.name} ${c.jobTitle} ${c.team}`.toLowerCase().includes(query.toLowerCase()));
 
-  const save = () => {
+  const save = async () => {
     if (!site) return;
-    setAssignments(site.id, selected);
+    const before = assignable.filter(c => c.siteIds.includes(site.id)).map(c => c.id);
+    const added = selected.filter(id => !before.includes(id));
+    const removed = before.filter(id => !selected.includes(id));
+    if (!(await attempt("Updating crew", () => setSiteCrew(site.id, added, removed)))) return;
     toast.success(`Crew updated for ${site.name}`, { description: `${selected.length} people assigned.` });
     onOpenChange(false);
   };

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Building2, HardHat, Mail, MailCheck, ShieldCheck, Sparkles, UserPlus } from "lucide-react";
+import { ArrowLeft, ArrowRight, Building2, HardHat, Loader2, Mail, MailCheck, ShieldCheck, Sparkles, UserPlus } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { EASE_OUT } from "@/components/motion";
-import { useDemoStore, type NewCrewInput } from "@/lib/store";
+import type { NewCrewInput } from "@/lib/admin";
+import { attempt, useLiveStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 import { ChoiceChip, Field, SelectCard, TextInput } from "./FormBits";
@@ -18,7 +19,9 @@ const JOB_TITLES = ["Mason", "Helper", "Carpenter", "Electrician", "Plumber", "W
 const TEAMS = ["Crew A", "Crew B", "Crew C", "Crew D"];
 const STEPS = ["Details", "Role", "Sites", "Review"] as const;
 
-const EMPTY: NewCrewInput = { name: "", email: "", phone: "", jobTitle: "Mason", team: "Crew A", appRole: "worker", siteIds: [] };
+const CREW_COLORS = ["#1a73e8", "#188038", "#a142f4", "#f29900", "#d93025", "#12b5cb"];
+
+const EMPTY: NewCrewInput = { name: "", email: "", phone: "", jobTitle: "Mason", team: "Crew A", appRole: "worker", color: CREW_COLORS[0], siteIds: [] };
 
 const slide = {
   enter: (dir: number) => ({ x: dir * 40, opacity: 0 }),
@@ -27,9 +30,8 @@ const slide = {
 };
 
 /**
- * Admin-side crew creation. In the real build this creates the Firebase
- * account (secondary-app trick) and sends a "set your password" email; here
- * it only adds an Invited row to the demo store.
+ * Admin-side crew creation: creates the Firebase account (see admin.ts
+ * inviteCrew) and emails a "set your password" link.
  */
 export function AddCrewDialog({
   open,
@@ -40,7 +42,8 @@ export function AddCrewDialog({
   onOpenChange: (open: boolean) => void;
   presetSiteId?: string;
 }) {
-  const { sites, addCrew } = useDemoStore();
+  const { sites, crew, inviteCrew } = useLiveStore();
+  const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
   // The provider re-keys this component on every open, so initial state is a fresh form.
@@ -73,10 +76,16 @@ export function AddCrewDialog({
     setStep(s => s + delta);
   };
 
-  const submit = () => {
-    const member = addCrew(form);
-    setDone(member.email);
-    toast.success(`Invite sent to ${member.name}`, { description: `A set-password email is on its way to ${member.email}.` });
+  const submit = async () => {
+    setBusy(true);
+    // A rotating colour so neighbours in the list are easy to tell apart.
+    const result = await attempt("Creating the account", () =>
+      inviteCrew({ ...form, email: form.email.trim(), name: form.name.trim(), color: CREW_COLORS[crew.length % CREW_COLORS.length] })
+    );
+    setBusy(false);
+    if (!result) return;
+    setDone(form.email.trim());
+    toast.success(`Invite sent to ${form.name}`, { description: `A set-password email is on its way to ${form.email.trim()}.` });
   };
 
   const toggleSite = (id: string) =>
@@ -219,7 +228,7 @@ export function AddCrewDialog({
                             <div className="min-w-0">
                               <div className="truncate text-sm font-bold">{site.name}</div>
                               <div className="truncate text-xs text-muted-foreground">
-                                {site.city} · {site.code}
+                                {site.code}
                               </div>
                             </div>
                           </div>
@@ -286,8 +295,8 @@ export function AddCrewDialog({
                 Continue <ArrowRight />
               </Button>
             ) : (
-              <Button size="lg" className="rounded-xl px-4 shadow-glow" onClick={submit}>
-                <Sparkles /> Create &amp; send invite
+              <Button size="lg" className="rounded-xl px-4 shadow-glow" onClick={submit} disabled={busy}>
+                {busy ? <Loader2 className="animate-spin" /> : <Sparkles />} Create &amp; send invite
               </Button>
             )}
           </div>

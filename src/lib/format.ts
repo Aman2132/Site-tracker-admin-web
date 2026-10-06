@@ -1,11 +1,10 @@
-import { DAY, HOUR, MINUTE, NOW } from "@/lib/mock/data";
+import { DAY, HOUR, IST_OFFSET, MINUTE } from "@/lib/time";
 
 /**
  * Dates render in IST, computed by hand rather than through Intl so the
  * server render and every browser produce byte-identical strings (ICU
  * versions differ on commas and narrow spaces, which breaks hydration).
  */
-const IST_OFFSET = 5.5 * HOUR;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -50,10 +49,10 @@ export function formatClock(hourOfDay: number): string {
   return `${h12}:${String(totalMin % 60).padStart(2, "0")} ${hour < 12 ? "am" : "pm"}`;
 }
 
-/** "just now", "12m ago", "3h ago", "2d ago" — relative to the demo's fixed NOW. */
+/** "just now", "12m ago", "3h ago", "2d ago". */
 export function timeAgo(t?: number): string {
   if (t == null) return "never";
-  const diff = Math.max(0, NOW - t);
+  const diff = Math.max(0, Date.now() - t);
   if (diff < MINUTE) return "just now";
   if (diff < HOUR) return `${Math.floor(diff / MINUTE)}m ago`;
   if (diff < DAY) return `${Math.floor(diff / HOUR)}h ago`;
@@ -77,6 +76,11 @@ export function formatDuration(ms: number): string {
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
+/** 27.7172, 85.324 -> "27.717200° N, 85.324000° E"; the letter follows the sign. */
+export function formatCoord(lat: number, lng: number): string {
+  return `${Math.abs(lat).toFixed(6)}° ${lat >= 0 ? "N" : "S"}, ${Math.abs(lng).toFixed(6)}° ${lng >= 0 ? "E" : "W"}`;
 }
 
 export const percent = (v: number) => `${Math.round(v * 100)}%`;

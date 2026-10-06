@@ -16,23 +16,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDay } from "@/lib/format";
-import { DAY, NOW, istDayStart } from "@/lib/mock/data";
-import { useDemoStore, useLookups } from "@/lib/store";
+import { DAY, istDayStart } from "@/lib/time";
+import { useLiveStore, useLookups } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 import type { ActivityEvent, EventKind } from "@/types/domain";
 
-const KIND_FILTERS: (EventKind | "all")[] = ["all", "arrive", "leave", "upload", "idle", "battery", "pause", "invite"];
+const KIND_FILTERS: (EventKind | "all")[] = ["all", "checkin", "checkout", "upload", "battery", "pause", "resume", "crew", "site"];
 
 function dayLabel(day: number) {
-  const today = istDayStart(NOW);
+  const today = istDayStart(Date.now());
   if (day === today) return "Today";
   if (day === today - DAY) return "Yesterday";
   return formatDay(day);
 }
 
 export function ActivityView() {
-  const { events, sites } = useDemoStore();
+  const { events, sites } = useLiveStore();
   const { siteById } = useLookups();
   const [kind, setKind] = useState<EventKind | "all">("all");
   const [site, setSite] = useState("all");
@@ -57,7 +57,7 @@ export function ActivityView() {
     <>
       <PageHeader
         title="Activity"
-        description="Arrivals, departures, uploads and alerts across every site — the same feed owners see on the phone, with history."
+        description="Check-ins, check-outs, uploads and alerts across every site, with history."
         actions={
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="outline" size="lg" className="rounded-xl bg-card" />}>

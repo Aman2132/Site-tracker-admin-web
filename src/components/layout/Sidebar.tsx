@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CountUp, SPRING } from "@/components/motion";
-import { useDemoStore } from "@/lib/store";
+import { useLiveStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 import { NAV_ITEMS, isActive } from "./nav";
@@ -93,7 +93,7 @@ export function NavList({ collapsed = false, onNavigate, layoutKey }: { collapse
 }
 
 function LiveCrewCard({ collapsed }: { collapsed: boolean }) {
-  const { crew } = useDemoStore();
+  const { crew } = useLiveStore();
   const online = crew.filter(c => c.status === "online").length;
   const total = crew.filter(c => c.status !== "invited" && c.status !== "deactivated").length;
 

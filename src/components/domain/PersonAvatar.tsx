@@ -23,7 +23,7 @@ export function PersonAvatar({
   showStatus = false,
   className,
 }: {
-  person: Pick<CrewMember, "name" | "color" | "status">;
+  person: Pick<CrewMember, "name" | "color" | "status"> & { avatar?: string };
   size?: keyof typeof SIZES;
   showStatus?: boolean;
   className?: string;
@@ -41,7 +41,12 @@ export function PersonAvatar({
           backgroundImage: `linear-gradient(135deg, color-mix(in oklab, ${person.color} 78%, white) 0%, ${person.color} 100%)`,
         }}
       >
-        {initials(person.name)}
+        {person.avatar ? (
+          // eslint-disable-next-line @next/next/no-img-element -- a small data URI, nothing to optimise
+          <img src={person.avatar} alt="" className="size-full rounded-full object-cover" />
+        ) : (
+          initials(person.name)
+        )}
       </span>
       {showStatus && (
         <StatusDot status={person.status} className="absolute -right-0.5 -bottom-0.5 ring-2 ring-card" />

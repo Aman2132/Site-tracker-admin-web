@@ -20,10 +20,10 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { BarCompare } from "@/components/charts/BarCompare";
-import { Donut } from "@/components/charts/Donut";
 import { ActivityFeed } from "@/components/domain/ActivityFeed";
 import { AssignSitesSheet } from "@/components/domain/AssignSheet";
 import { BatteryMeter } from "@/components/domain/BatteryMeter";
+import { CrewMap } from "@/components/domain/CrewMap";
 import { Lightbox } from "@/components/domain/Lightbox";
 import { EmptyState, Panel } from "@/components/domain/Panel";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
@@ -32,17 +32,15 @@ import { PresenceTimeline } from "@/components/domain/PresenceTimeline";
 import { StatusChip } from "@/components/domain/StatusDot";
 import { CountUp, Stagger, StaggerItem } from "@/components/motion";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { formatClock, formatDate, formatHours, formatWeekday, istHourOfDay, timeAgo } from "@/lib/format";
-import { activityMix, attendanceFor, lastNDays } from "@/lib/insights";
-import { HOUR } from "@/lib/mock/data";
-import { useDemoStore } from "@/lib/store";
+import { formatClock, formatDate, formatWeekday, istHourOfDay, timeAgo } from "@/lib/format";
+import { attendanceFor, lastNDays } from "@/lib/insights";
+import { HOUR } from "@/lib/time";
+import { attempt, useLiveStore } from "@/lib/store";
 import { useTarget } from "@/lib/useTarget";
 import { cn } from "@/lib/utils";
 
-const MIX_COLORS = { walk: "var(--chart-1)", vehicle: "var(--chart-3)", still: "var(--chart-5)" } as const;
-
 export function CrewProfileView({ id }: { id: string }) {
-  const { crew, sites, sessions, photos, events, setCrewActive } = useDemoStore();
+  const { crew, sites, sessions, photos, events, setCrewActive, resendInvite } = useLiveStore();
   const person = crew.find(c => c.id === id);
   const assign = useTarget();
   const [openPhoto, setOpenPhoto] = useState<string | null>(null);
@@ -86,7 +84,6 @@ export function CrewProfileView({ id }: { id: string }) {
 
   const mySites = sites.filter(s => person.siteIds.includes(s.id));
   const currentSite = sites.find(s => s.id === person.currentSiteId);
-  const mix = activityMix(person.id);
   const deactivated = person.status === "deactivated";
 
   return (
@@ -113,7 +110,7 @@ export function CrewProfileView({ id }: { id: string }) {
                   {person.appRole === "owner" && <span className="rounded-full bg-accent px-2.5 py-0.5 text-xs font-bold text-primary">Admin</span>}
                 </div>
                 <div className="mt-1 text-muted-foreground">
-                  {person.jobTitle} · {person.team}
+                  {[person.jobTitle, person.team].filter(Boolean).join(" · ")}
                   {currentSite && (
                     <>
                       {" "}· on site at <span className="font-semibold text-foreground">{currentSite.name}</span>
@@ -121,9 +118,9 @@ export function CrewProfileView({ id }: { id: string }) {
                   )}
                 </div>
                 <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
-                  <span className="inline-flex items-center gap-1.5"><Mail className="size-4" /> {person.email}</span>
-                  <span className="inline-flex items-center gap-1.5"><Phone className="size-4" /> {person.phone}</span>
-                  <span className="inline-flex items-center gap-1.5"><CalendarDays className="size-4" /> Joined {formatDate(person.joinedAt)}</span>
+                  {person.email && <span className="inline-flex items-center gap-1.5"><Mail className="size-4" /> {person.email}</span>}
+                  {person.phone && <span className="inline-flex items-center gap-1.5"><Phone className="size-4" /> {person.phone}</span>}
+                  {person.joinedAt != null && <span className="inline-flex items-center gap-1.5"><CalendarDays className="size-4" /> Invited {formatDate(person.joinedAt)}</span>}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -132,7 +129,11 @@ export function CrewProfileView({ id }: { id: string }) {
                     variant="outline"
                     size="lg"
                     className="rounded-xl"
-                    onClick={() => toast.success("Invite re-sent", { description: `New set-password link sent to ${person.email}.` })}
+                    onClick={async () => {
+                      if (!person.email) return toast.error("No email on file for this person.");
+                      if (await attempt("Resending the invite", () => resendInvite(person.email)))
+                        toast.success("Invite re-sent", { description: `New set-password link sent to ${person.email}.` });
+                    }}
                   >
                     <MailPlus /> Resend invite
                   </Button>
@@ -144,8 +145,8 @@ export function CrewProfileView({ id }: { id: string }) {
                   variant={deactivated ? "default" : "destructive"}
                   size="lg"
                   className="rounded-xl"
-                  onClick={() => {
-                    setCrewActive(person.id, deactivated);
+                  onClick={async () => {
+                    if (!(await attempt(deactivated ? "Reactivating" : "Deactivating", () => setCrewActive(person.id, person.name, deactivated)))) return;
                     toast(deactivated ? `${person.name} reactivated` : `${person.name} deactivated`);
                   }}
                 >
@@ -214,25 +215,12 @@ export function CrewProfileView({ id }: { id: string }) {
                 </div>
               </dl>
             </Panel>
-            <Panel title="How time was spent" description="From the phone's activity signal">
-              <div className="flex items-center gap-6">
-                <Donut
-                  size={132}
-                  thickness={16}
-                  centerValue={formatHours(data.weekHours)}
-                  centerLabel="tracked"
-                  segments={mix.map(m => ({ label: m.label, value: m.value, color: MIX_COLORS[m.kind] }))}
-                />
-                <ul className="space-y-2.5 text-sm">
-                  {mix.map(m => (
-                    <li key={m.kind} className="flex items-center gap-2.5">
-                      <span className="size-2.5 rounded-full" style={{ backgroundColor: MIX_COLORS[m.kind] }} />
-                      <span className="text-muted-foreground">{m.label}</span>
-                      <span className="font-bold">{Math.round(m.value * 100)}%</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+            <Panel title="Last known location" description={person.lat != null ? `Updated ${timeAgo(person.lastSeenAt)}` : undefined}>
+              {person.lat != null ? (
+                <CrewMap crew={[person]} sites={sites} fitKey={person.id} className="h-[200px] w-full" />
+              ) : (
+                <p className="text-sm text-muted-foreground">No location yet — they have not checked in.</p>
+              )}
             </Panel>
           </div>
         </StaggerItem>
@@ -264,9 +252,9 @@ export function CrewProfileView({ id }: { id: string }) {
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-bold">{s.name}</div>
-                        <div className="text-xs text-muted-foreground">{s.city}</div>
+                        <div className="text-xs text-muted-foreground">{s.code}</div>
                       </div>
-                      {s.id === person.currentSiteId && <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-bold text-success">Here now</span>}
+                      {s.id === person.currentSiteId && <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-bold text-success">Working now</span>}
                     </Link>
                   </li>
                 ))}

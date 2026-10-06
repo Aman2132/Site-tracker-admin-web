@@ -17,7 +17,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
-import { useDemoStore } from "@/lib/store";
+import { useLiveStore } from "@/lib/store";
 
 import { useDialogs } from "./DialogsProvider";
 import { NAV_ITEMS } from "./nav";
@@ -25,7 +25,7 @@ import { NAV_ITEMS } from "./nav";
 /** Ctrl/⌘+K: jump to any page, person or site, or start a creation flow. */
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const router = useRouter();
-  const { sites, crew } = useDemoStore();
+  const { sites, crew } = useLiveStore();
   const { openAddCrew, openCreateSite } = useDialogs();
   const { setTheme, resolvedTheme } = useTheme();
 
@@ -77,11 +77,11 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             {sites.map(site => (
               <CommandItem
                 key={site.id}
-                value={`site ${site.name} ${site.city} ${site.code}`}
+                value={`site ${site.name} ${site.code}`}
                 onSelect={() => run(() => router.push(`/sites/${site.id}`))}
               >
                 <Building2 /> {site.name}
-                <span className="ml-auto text-xs text-muted-foreground">{site.city}</span>
+                <span className="ml-auto text-xs text-muted-foreground">{site.code}</span>
               </CommandItem>
             ))}
           </CommandGroup>

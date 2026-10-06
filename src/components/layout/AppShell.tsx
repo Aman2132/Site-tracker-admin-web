@@ -3,9 +3,12 @@
 import { MotionConfig } from "motion/react";
 import { useCallback, useSyncExternalStore, type ReactNode } from "react";
 
-import { DemoStoreProvider } from "@/lib/store";
+import { AuthGate } from "@/components/auth/AuthGate";
+import { AuthProvider } from "@/components/auth/AuthProvider";
+import { LiveStoreProvider } from "@/lib/store";
 
 import { DialogsProvider } from "./DialogsProvider";
+import { LiveGate } from "./LiveGate";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
@@ -42,19 +45,25 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <MotionConfig reducedMotion="user">
-      <DemoStoreProvider>
-        <DialogsProvider>
-          <div className="flex min-h-dvh">
-            <Sidebar collapsed={collapsed} onToggle={toggle} />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <Topbar />
-              <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-                <div className="mx-auto w-full max-w-[1480px]">{children}</div>
-              </main>
-            </div>
-          </div>
-        </DialogsProvider>
-      </DemoStoreProvider>
+      <AuthProvider>
+        <AuthGate>
+          <LiveStoreProvider>
+            <DialogsProvider>
+              <div className="flex min-h-dvh">
+                <Sidebar collapsed={collapsed} onToggle={toggle} />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <Topbar />
+                  <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                    <div className="mx-auto w-full max-w-[1480px]">
+                      <LiveGate>{children}</LiveGate>
+                    </div>
+                  </main>
+                </div>
+              </div>
+            </DialogsProvider>
+          </LiveStoreProvider>
+        </AuthGate>
+      </AuthProvider>
     </MotionConfig>
   );
 }

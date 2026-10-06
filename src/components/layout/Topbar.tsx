@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BatteryLow, Clock3, LogOut, Menu, Search, Settings, UserRound, MailQuestion } from "lucide-react";
+import { Bell, BatteryLow, Clock3, LogOut, Menu, Search, UserRound, MailQuestion } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -17,12 +17,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useAdmin, useAuth } from "@/components/auth/AuthProvider";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
-import { formatDateTime } from "@/lib/format";
 import { needsAttention } from "@/lib/insights";
-import { ADMIN, NOW } from "@/lib/mock/data";
-import { useDemoStore } from "@/lib/store";
-import { cn } from "@/lib/utils";
+import { useLiveStore } from "@/lib/store";
 
 import { CommandPalette } from "./CommandPalette";
 import { NAV_ITEMS, isActive } from "./nav";
@@ -32,7 +30,7 @@ import { ThemeToggle } from "./ThemeToggle";
 const REASON_ICON = { idle: Clock3, battery: BatteryLow, invited: MailQuestion, offline: Clock3 };
 
 function NotificationsMenu() {
-  const { crew } = useDemoStore();
+  const { crew } = useLiveStore();
   const items = needsAttention(crew);
   return (
     <DropdownMenu>
@@ -80,6 +78,9 @@ function NotificationsMenu() {
 }
 
 function ProfileMenu() {
+  const admin = useAdmin();
+  const { signOutUser } = useAuth();
+  const person = { name: admin.profile.name, color: admin.profile.color, avatar: admin.profile.avatar, status: "online" as const };
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -91,28 +92,25 @@ function ProfileMenu() {
           />
         }
       >
-        <PersonAvatar person={{ name: ADMIN.name, color: "#1c4ff0", status: "online" }} size="sm" />
+        <PersonAvatar person={person} size="sm" />
         <div className="hidden text-left leading-tight xl:block">
-          <div className="text-sm font-bold">{ADMIN.name}</div>
-          <div className="text-[11px] text-muted-foreground">{ADMIN.role}</div>
+          <div className="text-sm font-bold">{admin.profile.name}</div>
+          <div className="text-[11px] text-muted-foreground">{admin.profile.role}</div>
         </div>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuGroup>
           <DropdownMenuLabel>
-            <div className="text-sm font-bold text-foreground">{ADMIN.name}</div>
-            <div className="text-xs font-normal">{ADMIN.email}</div>
+            <div className="text-sm font-bold text-foreground">{admin.profile.name}</div>
+            <div className="text-xs font-normal">{admin.email}</div>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem render={<Link href="/settings" />}>
           <UserRound /> Profile
         </DropdownMenuItem>
-        <DropdownMenuItem render={<Link href="/settings" />}>
-          <Settings /> Settings
-        </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive">
+        <DropdownMenuItem variant="destructive" onClick={signOutUser}>
           <LogOut /> Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -172,16 +170,6 @@ export function Topbar() {
         >
           <Search className="size-[18px]" />
         </Button>
-
-        <div
-          className={cn(
-            "hidden items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground 2xl:flex"
-          )}
-          title="This is a static demo — data is frozen at this time"
-        >
-          <span className="size-1.5 rounded-full bg-primary" />
-          Demo snapshot · {formatDateTime(NOW)}
-        </div>
 
         <NotificationsMenu />
         <ThemeToggle />

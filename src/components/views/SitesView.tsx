@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Clock, ImageIcon, LayoutGrid, List, MapPin, Plus, Search, UserRound, Users } from "lucide-react";
+import { Building2, Clock, ImageIcon, LayoutGrid, List, Plus, Search, UserRound, Users } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -10,24 +10,24 @@ import { PageHeader } from "@/components/domain/PageHeader";
 import { EmptyState } from "@/components/domain/Panel";
 import { AvatarStack } from "@/components/domain/PersonAvatar";
 import { SegmentedControl } from "@/components/domain/SegmentedControl";
-import { SiteMap } from "@/components/domain/SiteMap";
 import { SiteStatusBadge } from "@/components/domain/SiteStatusBadge";
 import { useDialogs } from "@/components/layout/DialogsProvider";
 import { EASE_OUT } from "@/components/motion";
 import { Button } from "@/components/ui/button";
-import { formatHours, percent } from "@/lib/format";
+import { formatHours } from "@/lib/format";
 import { lastNDays } from "@/lib/insights";
-import { NOW, istDayStart } from "@/lib/mock/data";
-import { useDemoStore } from "@/lib/store";
+import { istDayStart } from "@/lib/time";
+import { useLiveStore, useNow } from "@/lib/store";
 
 import type { Site, SiteStatus } from "@/types/domain";
 
 type Filter = "all" | SiteStatus;
 
 function useSiteSummaries() {
-  const { sites, crew, sessions, photos } = useDemoStore();
+  const { sites, crew, sessions, photos } = useLiveStore();
+  const now = useNow();
   return useMemo(() => {
-    const today = istDayStart(NOW);
+    const today = istDayStart(now);
     const weekStart = lastNDays(7)[0];
     return sites.map(site => {
       const assigned = crew.filter(c => c.siteIds.includes(site.id) && c.status !== "deactivated");
@@ -39,10 +39,10 @@ function useSiteSummaries() {
         photosWeek: photos.filter(p => p.siteId === site.id && p.takenAt >= weekStart).length,
         hoursToday: sessions
           .filter(s => s.siteId === site.id && s.start >= today)
-          .reduce((sum, s) => sum + ((s.end ?? NOW) - s.start), 0),
+          .reduce((sum, s) => sum + ((s.end ?? now) - s.start), 0),
       };
     });
-  }, [sites, crew, sessions, photos]);
+  }, [sites, crew, sessions, photos, now]);
 }
 
 type Summary = ReturnType<typeof useSiteSummaries>[number];
@@ -60,7 +60,9 @@ function SiteCard({ summary, index }: { summary: Summary; index: number }) {
     >
       <Link href={`/sites/${site.id}`} className="surface group block overflow-hidden rounded-3xl transition-shadow hover:shadow-lift">
         <div className="relative">
-          <SiteMap radius={site.radius} color={site.color} crew={here} interactive={false} className="rounded-none" />
+          <div className="h-24 w-full" style={{ backgroundColor: site.color }}>
+            <div className="bg-grid size-full opacity-30" />
+          </div>
           <div className="absolute top-3 left-3">
             <SiteStatusBadge status={site.status} className="shadow-card" />
           </div>
@@ -78,26 +80,10 @@ function SiteCard({ summary, index }: { summary: Summary; index: number }) {
             <div className="min-w-0">
               <h3 className="truncate text-lg font-extrabold tracking-tight transition-colors group-hover:text-primary">{site.name}</h3>
               <div className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
-                <MapPin className="size-3.5" /> {site.city} · <span className="font-mono text-xs">{site.code}</span>
+                <span className="font-mono text-xs">{site.code}</span>
               </div>
             </div>
             <AvatarStack people={assigned} max={3} size="sm" />
-          </div>
-
-          <div className="mt-4">
-            <div className="mb-1.5 flex justify-between text-xs font-semibold">
-              <span className="text-muted-foreground">Progress</span>
-              <span>{percent(site.progress)}</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-muted">
-              <motion.div
-                className="h-full rounded-full"
-                style={{ backgroundColor: site.color }}
-                initial={{ width: 0 }}
-                animate={{ width: percent(site.progress) }}
-                transition={{ duration: 1, ease: EASE_OUT, delay: 0.2 + index * 0.05 }}
-              />
-            </div>
           </div>
 
           <div className="mt-4 grid grid-cols-3 divide-x divide-border rounded-2xl bg-muted/60 py-2.5 text-center">
@@ -121,7 +107,7 @@ function SiteCard({ summary, index }: { summary: Summary; index: number }) {
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <UserRound className="size-3.5" /> Managed by {site.manager} · fence {site.radius} m
+            <UserRound className="size-3.5" /> {site.manager ? `Managed by ${site.manager}` : "No manager set"}
           </div>
         </div>
       </Link>
@@ -147,9 +133,7 @@ function SiteRow({ summary, index }: { summary: Summary; index: number }) {
           </span>
           <div className="min-w-0">
             <div className="truncate font-bold group-hover:text-primary">{site.name}</div>
-            <div className="text-xs text-muted-foreground">
-              {site.address}, {site.city}
-            </div>
+            <div className="text-xs text-muted-foreground">{site.code}</div>
           </div>
         </Link>
       </td>
@@ -157,15 +141,7 @@ function SiteRow({ summary, index }: { summary: Summary; index: number }) {
       <td className="px-3 py-3.5 font-semibold">{here.length} / {assigned.length}</td>
       <td className="px-3 py-3.5 font-semibold tabular-nums">{formatHours(hoursToday)}</td>
       <td className="px-3 py-3.5 font-semibold">{photosWeek}</td>
-      <td className="px-3 py-3.5">
-        <div className="flex items-center gap-2">
-          <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full" style={{ width: percent(site.progress), backgroundColor: site.color }} />
-          </div>
-          <span className="text-xs font-semibold">{percent(site.progress)}</span>
-        </div>
-      </td>
-      <td className="px-3 py-3.5 text-muted-foreground">{site.manager}</td>
+      <td className="px-3 py-3.5 text-muted-foreground">{site.manager || "—"}</td>
     </motion.tr>
   );
 }
@@ -180,14 +156,14 @@ export function SitesView() {
   const count = (s: Filter) => (s === "all" ? summaries.length : summaries.filter(x => x.site.status === s).length);
   const matches = (site: Site) =>
     (filter === "all" || site.status === filter) &&
-    `${site.name} ${site.city} ${site.code} ${site.address}`.toLowerCase().includes(query.trim().toLowerCase());
+    `${site.name} ${site.code} ${site.manager}`.toLowerCase().includes(query.trim().toLowerCase());
   const shown = summaries.filter(s => matches(s.site));
 
   return (
     <>
       <PageHeader
         title="Sites"
-        description="Every project, its geofence, and the crew assigned to it."
+        description="Every project and the crew assigned to it."
         actions={
           <Button size="lg" className="rounded-xl px-4 shadow-glow" onClick={openCreateSite}>
             <Plus /> Create site
@@ -253,7 +229,6 @@ export function SitesView() {
                   <th className="px-3 py-3.5">On site</th>
                   <th className="px-3 py-3.5">Hours today</th>
                   <th className="px-3 py-3.5">Photos / wk</th>
-                  <th className="px-3 py-3.5">Progress</th>
                   <th className="px-3 py-3.5">Manager</th>
                 </tr>
               </thead>

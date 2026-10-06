@@ -56,17 +56,29 @@ export function PhotoThumb({
           variants={{ hover: { scale: 1.06 } }}
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         >
-          <Image
-            src={photo.thumbUrl}
-            alt={photo.task}
-            fill
-            sizes="(min-width: 1280px) 20vw, (min-width: 768px) 33vw, 50vw"
-            onLoad={() => setLoaded(true)}
-            className={cn(
-              "object-cover transition-[filter,opacity] duration-700",
-              loaded ? "blur-0 opacity-100" : "scale-105 opacity-0 blur-md"
-            )}
-          />
+          {photo.mediaType === "video" && photo.thumbUrl === photo.fullUrl ? (
+            // Videos have no preview image; the first frame of the clip stands in.
+            <video
+              src={`${photo.fullUrl}#t=0.1`}
+              preload="metadata"
+              muted
+              playsInline
+              onLoadedData={() => setLoaded(true)}
+              className="absolute inset-0 size-full object-cover"
+            />
+          ) : (
+            <Image
+              src={photo.thumbUrl}
+              alt={photo.task}
+              fill
+              sizes="(min-width: 1280px) 20vw, (min-width: 768px) 33vw, 50vw"
+              onLoad={() => setLoaded(true)}
+              className={cn(
+                "object-cover transition-[filter,opacity] duration-700",
+                loaded ? "blur-0 opacity-100" : "scale-105 opacity-0 blur-md"
+              )}
+            />
+          )}
         </motion.div>
       </motion.div>
       {!loaded && <div className="shimmer absolute inset-0 bg-muted" />}
@@ -99,7 +111,7 @@ export function PhotoThumb({
             variants={{ hover: { height: 18, opacity: 1 } }}
           >
             <MapPin className="size-3" />
-            <span className="truncate">{site?.name}</span>
+            <span className="truncate">{site?.name ?? "No site"}</span>
           </motion.div>
         </div>
       )}

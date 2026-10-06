@@ -45,8 +45,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatHours, timeAgo } from "@/lib/format";
 import { hoursOnDay } from "@/lib/insights";
-import { NOW, istDayStart } from "@/lib/mock/data";
-import { useDemoStore, useLookups } from "@/lib/store";
+import { istDayStart } from "@/lib/time";
+import { attempt, useLiveStore, useLookups, useNow } from "@/lib/store";
 import { useTarget } from "@/lib/useTarget";
 
 import type { CrewMember, PresenceStatus } from "@/types/domain";
@@ -55,7 +55,7 @@ type Filter = "all" | PresenceStatus;
 type SortKey = "name" | "lastSeen" | "hours";
 
 function CrewActions({ person, onAssign }: { person: CrewMember; onAssign: () => void }) {
-  const { setCrewActive } = useDemoStore();
+  const { setCrewActive, resendInvite } = useLiveStore();
   const router = useRouter();
   const deactivated = person.status === "deactivated";
   return (
@@ -81,15 +81,21 @@ function CrewActions({ person, onAssign }: { person: CrewMember; onAssign: () =>
           <Building2 /> Assign sites
         </DropdownMenuItem>
         {person.status === "invited" && (
-          <DropdownMenuItem onClick={() => toast.success("Invite re-sent", { description: `New set-password link sent to ${person.email}.` })}>
+          <DropdownMenuItem
+            onClick={async () => {
+              if (!person.email) return toast.error("No email on file for this person.");
+              if (await attempt("Resending the invite", () => resendInvite(person.email)))
+                toast.success("Invite re-sent", { description: `New set-password link sent to ${person.email}.` });
+            }}
+          >
             <MailPlus /> Resend invite
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant={deactivated ? "default" : "destructive"}
-          onClick={() => {
-            setCrewActive(person.id, deactivated);
+          onClick={async () => {
+            if (!(await attempt(deactivated ? "Reactivating" : "Deactivating", () => setCrewActive(person.id, person.name, deactivated)))) return;
             toast(deactivated ? `${person.name} reactivated` : `${person.name} deactivated`, {
               description: deactivated ? "They can sign in again." : "They're signed out and can't sign back in.",
             });
@@ -104,10 +110,11 @@ function CrewActions({ person, onAssign }: { person: CrewMember; onAssign: () =>
 
 export function CrewView() {
   const router = useRouter();
-  const { crew, sessions, sites } = useDemoStore();
+  const { crew, sessions, sites } = useLiveStore();
   const { siteById } = useLookups();
   const { openAddCrew } = useDialogs();
   const assign = useTarget();
+  const now = useNow();
 
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -116,11 +123,11 @@ export function CrewView() {
   const [view, setView] = useState<"table" | "cards">("table");
 
   const hoursToday = useMemo(() => {
-    const today = istDayStart(NOW);
+    const today = istDayStart(now);
     const map = new Map<string, number>();
     for (const c of crew) map.set(c.id, hoursOnDay(sessions.filter(s => s.personId === c.id), today));
     return map;
-  }, [crew, sessions]);
+  }, [crew, sessions, now]);
 
   const counts = useMemo(() => {
     const c: Record<Filter, number> = { all: crew.length, online: 0, idle: 0, offline: 0, invited: 0, deactivated: 0 };
@@ -283,7 +290,7 @@ export function CrewView() {
                           <div className="min-w-0">
                             <div className="truncate font-bold transition-colors group-hover:text-primary">{p.name}</div>
                             <div className="truncate text-xs text-muted-foreground">
-                              {p.jobTitle} · {p.team}
+                              {[p.jobTitle, p.team].filter(Boolean).join(" · ")}
                               {p.appRole === "owner" && <span className="ml-1.5 rounded bg-accent px-1 text-[10px] font-bold text-primary">ADMIN</span>}
                             </div>
                           </div>
@@ -345,7 +352,7 @@ export function CrewView() {
                   </div>
                   <div className="mt-4 truncate text-base font-extrabold group-hover:text-primary">{p.name}</div>
                   <div className="text-sm text-muted-foreground">
-                    {p.jobTitle} · {p.team}
+                    {[p.jobTitle, p.team].filter(Boolean).join(" · ")}
                   </div>
                   <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-muted/60 p-3 text-center">
                     <div>

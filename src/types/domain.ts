@@ -1,7 +1,7 @@
 /**
  * Domain model for the admin dashboard. Mirrors the Site Tracker mobile
- * app's src/types/domain.ts, extended with what the dashboard needs and the
- * backend doesn't store yet: multi-site, site assignment, presence sessions.
+ * app's src/types/domain.ts and the Firebase documents it writes, plus the
+ * derived fields the dashboard shows (presence status, hours).
  */
 
 export type AppRole = "owner" | "worker";
@@ -9,24 +9,17 @@ export type AppRole = "owner" | "worker";
 /** Same vocabulary as the mobile app's ActivityKind. */
 export type ActivityKind = "vehicle" | "walk" | "still" | "stale";
 
-/** Dashboard-level presence, derived from sessions + last fix. */
+/** Dashboard-level presence, derived from the live position, check-in and roster flags. */
 export type PresenceStatus = "online" | "idle" | "offline" | "invited" | "deactivated";
 
 export type SiteStatus = "active" | "planning" | "paused" | "completed";
 
+/** A project: a name and the crew assigned to it. Deliberately has no location. */
 export interface Site {
   id: string;
   name: string;
   code: string;
-  address: string;
-  city: string;
-  lat: number;
-  lng: number;
-  /** Geofence radius, metres. */
-  radius: number;
   status: SiteStatus;
-  /** 0–1 construction progress, for the site card. */
-  progress: number;
   startedAt: number;
   manager: string;
   /** Visual accent for charts and pins. */
@@ -46,23 +39,28 @@ export interface CrewMember {
   avatar?: string;
   status: PresenceStatus;
   kind: ActivityKind;
+  /** Sites they're assigned to. */
   siteIds: string[];
-  /** Site they're physically inside right now, if any. */
+  /** Site they're checked in at right now, if any. */
   currentSiteId?: string;
   battery?: number;
   accuracy?: number;
+  /** Last position fix, epoch ms. */
   lastSeenAt?: number;
-  joinedAt: number;
-  /** Position inside the current site's schematic map, 0–1 on each axis. */
-  mapX?: number;
-  mapY?: number;
+  /** When they were invited; absent for people who signed up on their own. */
+  joinedAt?: number;
+  /** Last reported position; absent until the phone has sent one. */
+  lat?: number;
+  lng?: number;
+  /** Checked in but paused sharing. */
+  paused?: boolean;
 }
 
 export type MediaKind = "photo" | "video";
 
 export interface SitePhoto {
   id: string;
-  /** Small preview (~480px). */
+  /** Small preview (~400px); the full file when the capture has none (older uploads, videos). */
   thumbUrl: string;
   /** Full-resolution original. */
   fullUrl: string;
@@ -71,6 +69,7 @@ export interface SitePhoto {
   mediaType: MediaKind;
   durationMs?: number;
   personId: string;
+  /** Empty when the person wasn't checked in at a site. */
   siteId: string;
   task: string;
   takenAt: number;
@@ -82,7 +81,7 @@ export interface SitePhoto {
 
 export type SessionEndReason = "signed-off" | "paused" | "timeout";
 
-/** One continuous stretch of location sharing. `end` is undefined while still open. */
+/** One continuous stretch of checked-in time. `end` is undefined while still open. */
 export interface PresenceSession {
   id: string;
   personId: string;
@@ -92,16 +91,7 @@ export interface PresenceSession {
   endReason?: SessionEndReason;
 }
 
-export type EventKind =
-  | "arrive"
-  | "leave"
-  | "upload"
-  | "battery"
-  | "pause"
-  | "resume"
-  | "idle"
-  | "invite"
-  | "site";
+export type EventKind = "checkin" | "checkout" | "upload" | "battery" | "pause" | "resume" | "crew" | "site" | "other";
 
 export interface ActivityEvent {
   id: string;
@@ -111,4 +101,33 @@ export interface ActivityEvent {
   siteId?: string;
   text: string;
   severity: "info" | "warn" | "success";
+}
+
+/** `people/{uid}` as stored in Firestore. */
+export interface PersonDoc {
+  id: string;
+  name: string;
+  role: string;
+  color: string;
+  appRole: AppRole;
+  active?: boolean;
+  avatar?: string;
+  siteIds?: string[];
+  email?: string;
+  phone?: string;
+  team?: string;
+  invitedAt?: number;
+}
+
+/** `positions/{uid}` in the Realtime Database. */
+export interface PositionDoc {
+  lat?: number;
+  lng?: number;
+  accuracy?: number;
+  lastFixAt?: number;
+  battery?: number;
+  paused?: boolean;
+  kind?: ActivityKind;
+  /** Set while checked in, null/absent once checked out. */
+  siteId?: string | null;
 }
