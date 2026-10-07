@@ -27,7 +27,7 @@ export function PageHeader({
         {eyebrow && (
           <div className="mb-1.5 text-xs font-bold tracking-[0.14em] text-primary uppercase">{eyebrow}</div>
         )}
-        <h1 className="text-[28px] leading-tight font-extrabold tracking-tight sm:text-[32px]">{title}</h1>
+        <h1 className="text-[28px] leading-tight font-semibold tracking-tight sm:text-[32px]">{title}</h1>
         {description && <p className="mt-1.5 max-w-2xl text-[15px] text-muted-foreground">{description}</p>}
       </motion.div>
       {actions && (

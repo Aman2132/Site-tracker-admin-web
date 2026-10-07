@@ -39,7 +39,7 @@ export function SettingsView() {
           <div className="flex items-center gap-4 border-b border-border py-6">
             <PersonAvatar person={{ name: admin.profile.name, color: admin.profile.color, status: "online" }} size="xl" />
             <div>
-              <div className="text-xl font-extrabold">{admin.profile.name}</div>
+              <div className="text-xl font-semibold">{admin.profile.name}</div>
               <div className="text-sm text-muted-foreground">{admin.profile.role} · Admin</div>
             </div>
           </div>

@@ -194,7 +194,7 @@ function MetaPanel({ photo, onClose }: { photo: SitePhoto; onClose: () => void }
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-bold tracking-[0.14em] text-faint uppercase">{photo.mediaType === "video" ? "Video" : "Photo"}</div>
-          <h2 className="mt-1 text-xl font-extrabold tracking-tight">{photo.task}</h2>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight">{photo.task}</h2>
         </div>
         <Button variant="ghost" size="icon-lg" className="rounded-xl" onClick={onClose} aria-label="Close">
           <X />

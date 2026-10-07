@@ -56,29 +56,26 @@ function SiteCard({ summary, index }: { summary: Summary; index: number }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.45, ease: EASE_OUT, delay: Math.min(index, 8) * 0.05 }}
-      whileHover={{ y: -5 }}
+      whileHover={{ y: -2 }}
     >
-      <Link href={`/sites/${site.id}`} className="surface group block overflow-hidden rounded-3xl transition-shadow hover:shadow-lift">
-        <div className="relative">
-          <div className="h-24 w-full" style={{ backgroundColor: site.color }}>
-            <div className="bg-grid size-full opacity-30" />
-          </div>
-          <div className="absolute top-3 left-3">
-            <SiteStatusBadge status={site.status} className="shadow-card" />
-          </div>
-          {here.length > 0 && (
-            <div className="absolute top-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-card/90 px-2.5 py-0.5 text-xs font-bold shadow-card backdrop-blur">
-              <span className="relative inline-flex size-1.5 rounded-full bg-success">
-                <span className="absolute inset-0 animate-ping-soft rounded-full bg-success" />
-              </span>
-              {here.length} on site
-            </div>
-          )}
-        </div>
+      <Link href={`/sites/${site.id}`} className="surface group block overflow-hidden rounded-xl transition-shadow hover:shadow-lift">
+        {/* A thin accent in the site's colour instead of a solid banner. */}
+        <div className="h-1 w-full" style={{ backgroundColor: site.color }} />
         <div className="p-5">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <SiteStatusBadge status={site.status} />
+            {here.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-success">
+                <span className="relative inline-flex size-1.5 rounded-full bg-success">
+                  <span className="absolute inset-0 animate-ping-soft rounded-full bg-success" />
+                </span>
+                {here.length} on site
+              </span>
+            )}
+          </div>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="truncate text-lg font-extrabold tracking-tight transition-colors group-hover:text-primary">{site.name}</h3>
+              <h3 className="truncate text-lg font-semibold tracking-tight transition-colors group-hover:text-primary">{site.name}</h3>
               <div className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
                 <span className="font-mono text-xs">{site.code}</span>
               </div>
@@ -88,19 +85,19 @@ function SiteCard({ summary, index }: { summary: Summary; index: number }) {
 
           <div className="mt-4 grid grid-cols-3 divide-x divide-border rounded-2xl bg-muted/60 py-2.5 text-center">
             <div>
-              <div className="flex items-center justify-center gap-1 text-sm font-extrabold">
+              <div className="flex items-center justify-center gap-1 text-sm font-semibold">
                 <Users className="size-3.5 text-muted-foreground" /> {assigned.length}
               </div>
               <div className="text-[10px] font-semibold text-muted-foreground uppercase">Crew</div>
             </div>
             <div>
-              <div className="flex items-center justify-center gap-1 text-sm font-extrabold">
+              <div className="flex items-center justify-center gap-1 text-sm font-semibold">
                 <Clock className="size-3.5 text-muted-foreground" /> {formatHours(hoursToday)}
               </div>
               <div className="text-[10px] font-semibold text-muted-foreground uppercase">Today</div>
             </div>
             <div>
-              <div className="flex items-center justify-center gap-1 text-sm font-extrabold">
+              <div className="flex items-center justify-center gap-1 text-sm font-semibold">
                 <ImageIcon className="size-3.5 text-muted-foreground" /> {photosWeek}
               </div>
               <div className="text-[10px] font-semibold text-muted-foreground uppercase">Photos/wk</div>

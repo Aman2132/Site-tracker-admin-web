@@ -37,7 +37,7 @@ export function AssignSitesSheet({
     <Sheet open={open && !!person} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 sm:max-w-md">
         <SheetHeader className="border-b border-border p-6">
-          <SheetTitle className="text-lg font-extrabold">Assign sites</SheetTitle>
+          <SheetTitle className="text-lg font-semibold">Assign sites</SheetTitle>
           <SheetDescription>Photos and attendance are filed under these sites.</SheetDescription>
           {person && (
             <div className="mt-3 flex items-center gap-3 rounded-2xl bg-muted/60 p-3">
@@ -121,7 +121,7 @@ export function AssignCrewSheet({
     <Sheet open={open && !!site} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 sm:max-w-md">
         <SheetHeader className="border-b border-border p-6">
-          <SheetTitle className="text-lg font-extrabold">Assign crew</SheetTitle>
+          <SheetTitle className="text-lg font-semibold">Assign crew</SheetTitle>
           <SheetDescription>{site?.name}</SheetDescription>
           <div className="relative mt-3">
             <Search className="absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />

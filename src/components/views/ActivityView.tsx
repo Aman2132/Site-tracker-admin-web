@@ -78,7 +78,7 @@ export function ActivityView() {
       />
 
       <div className="grid gap-5 lg:grid-cols-[260px_1fr]">
-        <div className="lg:sticky lg:top-[96px] lg:self-start">
+        <div className="lg:sticky lg:top-[84px] lg:self-start">
           <div className="surface flex gap-1 overflow-x-auto rounded-2xl p-2 scrollbar-thin lg:flex-col">
             {KIND_FILTERS.map(k => {
               const active = kind === k;

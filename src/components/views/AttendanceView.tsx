@@ -202,7 +202,7 @@ export function AttendanceView() {
             >
               <div />
               {days.map(d => (
-                <div key={d} className={cn("text-center text-xs leading-tight", d === dayStart(now) ? "font-extrabold text-primary" : "font-semibold text-muted-foreground")}>
+                <div key={d} className={cn("text-center text-xs leading-tight", d === dayStart(now) ? "font-semibold text-primary" : "font-semibold text-muted-foreground")}>
                   <div>{formatWeekday(d)}</div>
                   <div className="text-[10px] opacity-75">{formatDayMonth(d)}</div>
                 </div>
@@ -221,7 +221,7 @@ export function AttendanceView() {
                   {row.cells.map((cell, c) => (
                     <HeatCell key={cell.day} cell={cell} delay={Math.min(r * 0.03 + c * 0.015, 0.8)} />
                   ))}
-                  <div className="text-right text-sm font-extrabold tabular-nums">{formatHours(row.total)}</div>
+                  <div className="text-right text-sm font-semibold tabular-nums">{formatHours(row.total)}</div>
                 </div>
               ))}
             </div>
@@ -247,7 +247,7 @@ export function AttendanceView() {
                     <motion.span layoutId="day-pick" className="absolute inset-0 rounded-xl bg-primary shadow-glow" transition={{ type: "spring", stiffness: 380, damping: 32 }} />
                   )}
                   <span className="relative">{formatWeekday(d)}</span>
-                  <span className="relative text-sm font-extrabold">{formatDayMonth(d).split(" ")[0]}</span>
+                  <span className="relative text-sm font-semibold">{formatDayMonth(d).split(" ")[0]}</span>
                 </button>
               ))}
             </div>

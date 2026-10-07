@@ -9,9 +9,12 @@
  * (src/constants/theme.ts there): primary blue #1c4ff0, ink navy #0b0e1c,
  * success/warning/danger and the "stale" grey. Components use these through
  * Tailwind classes (bg-primary, text-success, ...) — never raw hex.
+ *
+ * Look: a calm, flat admin style (small radii, 1px borders, faint shadows,
+ * no glows or gradient fills). Every rounded-* class scales from --radius.
  */
 :root {
-  --radius: 0.875rem;
+  --radius: 0.5rem;
 
   --background: #f4f5fa;
   --foreground: #0d0f1a;
@@ -61,9 +64,9 @@
   --sidebar-border: #e7e9f2;
   --sidebar-ring: #4f7bff;
 
-  --shadow-card: 0 1px 2px rgb(11 13 22 / 0.04), 0 4px 16px -4px rgb(11 13 22 / 0.06);
-  --shadow-lift: 0 2px 4px rgb(11 13 22 / 0.05), 0 18px 40px -12px rgb(11 13 22 / 0.18);
-  --shadow-glow: 0 12px 32px -10px rgb(28 79 240 / 0.55);
+  --shadow-card: 0 1px 2px rgb(11 13 22 / 0.04);
+  --shadow-lift: 0 4px 14px -4px rgb(11 13 22 / 0.12);
+  --shadow-glow: none;
   --grid-line: rgb(28 79 240 / 0.08);
 }
 
@@ -116,9 +119,9 @@
   --sidebar-border: #1c2135;
   --sidebar-ring: #4f7bff;
 
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px -8px rgb(0 0 0 / 0.5);
-  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.4), 0 22px 44px -14px rgb(0 0 0 / 0.7);
-  --shadow-glow: 0 12px 36px -10px rgb(79 123 255 / 0.6);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-lift: 0 6px 18px -6px rgb(0 0 0 / 0.6);
+  --shadow-glow: none;
   --grid-line: rgb(125 157 255 / 0.07);
 }
 
@@ -212,21 +215,15 @@
       linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
     background-size: 28px 28px;
   }
+  /* Flat fills: kept as classes so components stay unchanged, but no gradients. */
   .bg-hero {
-    background:
-      radial-gradient(120% 120% at 100% 0%, color-mix(in oklab, var(--primary-bright) 55%, transparent) 0%, transparent 55%),
-      linear-gradient(135deg, var(--primary) 0%, var(--primary-deep) 100%);
+    background: var(--primary);
   }
   .bg-ink-hero {
-    background:
-      radial-gradient(90% 120% at 100% 0%, color-mix(in oklab, var(--primary) 45%, transparent) 0%, transparent 60%),
-      linear-gradient(160deg, var(--ink-raised) 0%, var(--ink) 100%);
+    background: var(--ink-raised);
   }
   .text-gradient {
-    background: linear-gradient(120deg, var(--primary) 0%, var(--chart-4) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: var(--primary);
   }
   .scrollbar-thin {
     scrollbar-width: thin;

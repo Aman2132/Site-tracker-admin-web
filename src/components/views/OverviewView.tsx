@@ -112,15 +112,9 @@ export function OverviewView() {
       <Stagger className="grid gap-5">
         {/* Hero: live presence */}
         <StaggerItem className="grid gap-5 xl:grid-cols-[1.35fr_1fr]">
-          <div className="relative flex flex-col overflow-hidden rounded-3xl bg-ink-hero p-6 text-white sm:p-7">
-            <div className="bg-grid absolute inset-0 opacity-30" />
-            <motion.div
-              className="absolute -top-24 -right-24 size-72 rounded-full bg-primary/40 blur-3xl"
-              animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.8, 0.5] }}
-              transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-            />
-            <div className="relative flex flex-1 flex-col">
-              <div className="flex items-center gap-2 text-xs font-bold tracking-[0.14em] text-white/60 uppercase">
+          <div className="surface flex flex-col rounded-xl p-6">
+            <div className="flex flex-1 flex-col">
+              <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
                 <span className="relative inline-flex size-2 rounded-full bg-success">
                   <span className="absolute inset-0 animate-ping-soft rounded-full bg-success" />
                 </span>
@@ -129,10 +123,10 @@ export function OverviewView() {
               <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-4">
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <CountUp value={counts.online} className="text-6xl leading-none font-extrabold tracking-tight" />
-                    <span className="text-lg text-white/60">online</span>
+                    <CountUp value={counts.online} className="text-5xl leading-none font-semibold tracking-tight" />
+                    <span className="text-lg text-muted-foreground">online</span>
                   </div>
-                  <div className="mt-2 text-sm text-white/60">
+                  <div className="mt-2 text-sm text-muted-foreground">
                     of {crew.length - counts.deactivated} people on the roster
                   </div>
                 </div>
@@ -140,7 +134,7 @@ export function OverviewView() {
                   <AvatarStack people={online} max={6} size="md" />
                 </div>
               </div>
-              <PresenceBar counts={counts} dark className="mt-6" />
+              <PresenceBar counts={counts} className="mt-6" />
 
               <div className="mt-auto grid gap-2.5 pt-7 sm:grid-cols-2 xl:grid-cols-3">
                 {sites
@@ -156,11 +150,11 @@ export function OverviewView() {
                       >
                         <Link
                           href={`/sites/${s.id}`}
-                          className="flex items-center gap-3 rounded-2xl bg-white/[0.06] p-3 ring-1 ring-white/10 transition-colors hover:bg-white/[0.12]"
+                          className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-muted"
                         >
                           <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
                           <span className="min-w-0 flex-1 truncate text-sm font-semibold">{s.name}</span>
-                          <span className="text-lg font-extrabold">{hereCount}</span>
+                          <span className="text-lg font-semibold">{hereCount}</span>
                         </Link>
                       </motion.div>
                     );
@@ -306,7 +300,7 @@ export function OverviewView() {
                       <div className="text-xs text-muted-foreground">{site.manager || site.code}</div>
                       <div className="mt-4 flex items-end justify-between">
                         <div>
-                          <div className="text-2xl font-extrabold tracking-tight">
+                          <div className="text-2xl font-semibold tracking-tight">
                             <CountUp value={here.length} duration={0.8 + i * 0.1} />
                             <span className="text-sm font-semibold text-muted-foreground"> / {assigned}</span>
                           </div>

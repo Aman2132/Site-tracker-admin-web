@@ -126,7 +126,7 @@ export function Topbar() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/70 bg-background/75 backdrop-blur-xl">
-      <div className="flex h-[72px] items-center gap-3 px-4 sm:px-6 lg:px-8">
+      <div className="flex h-[60px] items-center gap-3 px-4 sm:px-6 lg:px-8">
         <Button
           variant="ghost"
           size="icon-lg"
@@ -148,7 +148,7 @@ export function Topbar() {
             <div className="truncate text-[11px] font-bold tracking-[0.14em] text-faint uppercase">
               {current?.description ?? "Site Tracker"}
             </div>
-            <div className="truncate text-lg font-extrabold tracking-tight">{current?.label ?? "Admin"}</div>
+            <div className="truncate text-lg font-semibold tracking-tight">{current?.label ?? "Admin"}</div>
           </motion.div>
         </div>
 

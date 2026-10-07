@@ -104,7 +104,7 @@ export function SiteDetailView({ id }: { id: string }) {
               </motion.span>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{site.name}</h1>
+                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{site.name}</h1>
                   <DropdownMenu>
                     <DropdownMenuTrigger render={<button type="button" className="inline-flex items-center gap-1 rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Change status" />}>
                       <SiteStatusBadge status={site.status} /> <ChevronDown className="size-3.5 text-muted-foreground" />
@@ -152,7 +152,7 @@ export function SiteDetailView({ id }: { id: string }) {
               <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                 <stat.icon className="size-4" style={{ color: site.color }} /> {stat.label}
               </div>
-              <div className="mt-2 text-2xl font-extrabold tracking-tight">
+              <div className="mt-2 text-2xl font-semibold tracking-tight">
                 <CountUp value={stat.value} decimals={stat.decimals ?? 0} suffix={stat.suffix} />
               </div>
             </div>

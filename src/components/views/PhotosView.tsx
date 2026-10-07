@@ -214,7 +214,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
           {groups.map(([day, items]) => (
             <section key={day}>
               <div className="sticky top-[72px] z-10 -mx-2 mb-3 flex items-center gap-3 bg-background/85 px-2 py-2 backdrop-blur">
-                <h2 className="text-base font-extrabold">{dayLabel(day)}</h2>
+                <h2 className="text-base font-semibold">{dayLabel(day)}</h2>
                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground">{items.length}</span>
                 <span className="h-px flex-1 bg-border" />
                 <button

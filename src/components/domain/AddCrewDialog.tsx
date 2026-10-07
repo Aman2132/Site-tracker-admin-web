@@ -95,32 +95,31 @@ export function AddCrewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-0 overflow-hidden rounded-3xl p-0 sm:max-w-[560px]">
         {/* Header with step progress */}
-        <div className="relative overflow-hidden bg-ink-hero px-6 pt-6 pb-5 text-white">
-          <div className="bg-grid absolute inset-0 opacity-30" />
-          <div className="relative flex items-center gap-3">
-            <span className="flex size-11 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
+        <div className="border-b border-border px-6 pt-6 pb-5">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-lg bg-accent text-primary">
               <UserPlus className="size-5" />
             </span>
             <div>
-              <DialogTitle className="text-lg font-extrabold text-white">Add crew member</DialogTitle>
-              <DialogDescription className="text-sm text-white/65">
+              <DialogTitle className="text-lg font-semibold">Add crew member</DialogTitle>
+              <DialogDescription className="text-sm">
                 They&apos;ll get an email to set a password, then sign in on the app.
               </DialogDescription>
             </div>
           </div>
           {!done && (
-            <div className="relative mt-5 grid grid-cols-4 gap-2">
+            <div className="mt-5 grid grid-cols-4 gap-2">
               {STEPS.map((label, i) => (
                 <div key={label}>
-                  <div className="h-1 overflow-hidden rounded-full bg-white/15">
+                  <div className="h-1 overflow-hidden rounded-full bg-muted">
                     <motion.div
-                      className="h-full rounded-full bg-primary-bright"
+                      className="h-full rounded-full bg-primary"
                       initial={false}
                       animate={{ width: i <= step ? "100%" : "0%" }}
                       transition={{ duration: 0.45, ease: EASE_OUT }}
                     />
                   </div>
-                  <div className={cn("mt-1.5 text-[11px] font-semibold", i <= step ? "text-white" : "text-white/45")}>{label}</div>
+                  <div className={cn("mt-1.5 text-[11px] font-semibold", i <= step ? "text-foreground" : "text-faint")}>{label}</div>
                 </div>
               ))}
             </div>
@@ -243,7 +242,7 @@ export function AddCrewDialog({
                     <div className="flex items-center gap-4 rounded-2xl border border-border bg-muted/50 p-4">
                       <PersonAvatar person={{ name: form.name || "?", color: "#1c4ff0", status: "invited" }} size="lg" />
                       <div className="min-w-0">
-                        <div className="truncate text-lg font-extrabold">{form.name}</div>
+                        <div className="truncate text-lg font-semibold">{form.name}</div>
                         <div className="truncate text-sm text-muted-foreground">
                           {form.jobTitle} · {form.team} · {form.appRole === "owner" ? "Admin" : "Worker"}
                         </div>
@@ -330,7 +329,7 @@ function SuccessView({ email, name, onAnother, onClose }: { email: string; name:
           <MailCheck className="size-7" />
         </motion.span>
       </div>
-      <h3 className="mt-5 text-xl font-extrabold">{name} is invited</h3>
+      <h3 className="mt-5 text-xl font-semibold">{name} is invited</h3>
       <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
         A set-password email went to <b className="text-foreground">{email}</b>. They&apos;ll appear as <b>Invited</b> in the
         crew list until they sign in.

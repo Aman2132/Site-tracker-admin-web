@@ -96,16 +96,14 @@ export function CrewProfileView({ id }: { id: string }) {
         {/* Header */}
         <StaggerItem>
           <div className="surface relative overflow-hidden rounded-3xl">
-            <div className="h-28 bg-hero sm:h-32">
-              <div className="bg-grid size-full opacity-40" />
-            </div>
+            <div className="h-20 border-b border-border bg-muted sm:h-24" />
             <div className="flex flex-col gap-5 px-6 pb-6 sm:flex-row sm:items-end sm:px-8">
               <div className="-mt-12 rounded-full bg-card p-1.5 shadow-lift sm:-mt-14">
                 <PersonAvatar person={person} size="xl" showStatus={person.status === "online" || person.status === "idle"} />
               </div>
               <div className="min-w-0 flex-1 sm:pt-4">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{person.name}</h1>
+                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{person.name}</h1>
                   <StatusChip status={person.status} />
                   {person.appRole === "owner" && <span className="rounded-full bg-accent px-2.5 py-0.5 text-xs font-bold text-primary">Admin</span>}
                 </div>
@@ -174,7 +172,7 @@ export function CrewProfileView({ id }: { id: string }) {
               <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                 <stat.icon className="size-4 text-primary" /> {stat.label}
               </div>
-              <div className="mt-2 text-2xl font-extrabold tracking-tight">{stat.node}</div>
+              <div className="mt-2 text-2xl font-semibold tracking-tight">{stat.node}</div>
               {stat.sub && <div className="mt-0.5 text-xs text-muted-foreground">{stat.sub}</div>}
             </div>
           ))}

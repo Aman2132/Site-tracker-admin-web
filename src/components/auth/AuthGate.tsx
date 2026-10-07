@@ -43,7 +43,7 @@ function LoginForm() {
     <Centered>
       <BrandMark />
       <div>
-        <h1 className="text-xl font-extrabold tracking-tight">Sign in</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Sign in</h1>
         <p className="mt-1 text-sm text-muted-foreground">Use your owner account from the Site Tracker app.</p>
       </div>
       <form onSubmit={submit} className="space-y-4">
@@ -97,7 +97,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <Centered>
         <BrandMark />
         <div>
-          <h1 className="text-xl font-extrabold tracking-tight">Can&apos;t open the dashboard</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Can&apos;t open the dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">{state.reason}</p>
           <p className="mt-1 text-xs text-faint">Signed in as {state.email}</p>
         </div>

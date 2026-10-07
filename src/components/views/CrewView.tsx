@@ -350,17 +350,17 @@ export function CrewView() {
                     <PersonAvatar person={p} size="lg" showStatus={p.status === "online" || p.status === "idle"} />
                     <StatusChip status={p.status} />
                   </div>
-                  <div className="mt-4 truncate text-base font-extrabold group-hover:text-primary">{p.name}</div>
+                  <div className="mt-4 truncate text-base font-semibold group-hover:text-primary">{p.name}</div>
                   <div className="text-sm text-muted-foreground">
                     {[p.jobTitle, p.team].filter(Boolean).join(" · ")}
                   </div>
                   <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-muted/60 p-3 text-center">
                     <div>
-                      <div className="text-sm font-extrabold">{formatHours(hoursToday.get(p.id) ?? 0)}</div>
+                      <div className="text-sm font-semibold">{formatHours(hoursToday.get(p.id) ?? 0)}</div>
                       <div className="text-[10px] font-semibold text-muted-foreground uppercase">Today</div>
                     </div>
                     <div>
-                      <div className="text-sm font-extrabold">{p.siteIds.length}</div>
+                      <div className="text-sm font-semibold">{p.siteIds.length}</div>
                       <div className="text-[10px] font-semibold text-muted-foreground uppercase">Sites</div>
                     </div>
                     <div>

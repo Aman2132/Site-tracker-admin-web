@@ -29,7 +29,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
             transition={{ duration: 0.18 }}
             className="leading-tight whitespace-nowrap"
           >
-            <div className="text-[15px] font-extrabold tracking-tight">Site Tracker</div>
+            <div className="text-[15px] font-semibold tracking-tight">Site Tracker</div>
             <div className="text-[11px] font-semibold tracking-[0.14em] text-faint uppercase">Admin console</div>
           </motion.div>
         )}
@@ -99,31 +99,30 @@ function LiveCrewCard({ collapsed }: { collapsed: boolean }) {
 
   if (collapsed) {
     return (
-      <div className="flex flex-col items-center gap-1 rounded-xl bg-ink-hero py-3 text-white">
+      <div className="flex flex-col items-center gap-1 rounded-lg border border-border bg-card py-3">
         <span className="relative inline-flex size-2 rounded-full bg-success">
           <span className="absolute inset-0 animate-ping-soft rounded-full bg-success" />
         </span>
-        <span className="text-sm font-extrabold">{online}</span>
+        <span className="text-sm font-semibold">{online}</span>
       </div>
     );
   }
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-ink-hero p-4 text-white">
-      <div className="bg-grid absolute inset-0 opacity-40" />
-      <div className="relative">
-        <div className="flex items-center gap-2 text-[11px] font-bold tracking-[0.14em] text-white/60 uppercase">
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div>
+        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
           <span className="relative inline-flex size-2 rounded-full bg-success">
             <span className="absolute inset-0 animate-ping-soft rounded-full bg-success" />
           </span>
           Live now
         </div>
         <div className="mt-2 flex items-baseline gap-1.5">
-          <CountUp value={online} className="text-3xl font-extrabold tracking-tight" />
-          <span className="text-sm text-white/60">/ {total} crew on shift</span>
+          <CountUp value={online} className="text-3xl font-semibold tracking-tight" />
+          <span className="text-sm text-muted-foreground">/ {total} crew on shift</span>
         </div>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
           <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-primary-bright to-success"
+            className="h-full rounded-full bg-success"
             initial={{ width: 0 }}
             animate={{ width: `${(online / Math.max(total, 1)) * 100}%` }}
             transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
@@ -142,7 +141,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       transition={SPRING}
       className="sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex"
     >
-      <div className={cn("flex h-[72px] items-center px-5", collapsed && "justify-center px-0")}>
+      <div className={cn("flex h-[60px] items-center px-5", collapsed && "justify-center px-0")}>
         <BrandMark compact={collapsed} />
       </div>
       <div className={cn("flex-1 overflow-y-auto px-4 py-3 scrollbar-thin", collapsed && "px-3")}>

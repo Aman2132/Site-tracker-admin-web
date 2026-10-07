@@ -60,7 +60,7 @@ export function CreateSiteDialog({ open, onOpenChange }: { open: boolean; onOpen
               <Building2 className="size-5" />
             </span>
             <div>
-              <DialogTitle className="text-lg font-extrabold">Create a site</DialogTitle>
+              <DialogTitle className="text-lg font-semibold">Create a site</DialogTitle>
               <DialogDescription>A project and the crew who work on it. You can change both later.</DialogDescription>
             </div>
           </div>
