@@ -72,6 +72,8 @@ export interface SitePhoto {
   /** Empty when the person wasn't checked in at a site. */
   siteId: string;
   task: string;
+  /** Optional free-text description written by the crew. */
+  note?: string;
   takenAt: number;
   lat: number;
   lng: number;
@@ -131,3 +133,23 @@ export interface PositionDoc {
   /** Set while checked in, null/absent once checked out. */
   siteId?: string | null;
 }
+
+/** One item received at a site (`inventory/{id}`), logged by the crew from the app. */
+export interface InventoryEntry {
+  id: string;
+  personId: string;
+  /** Name stamped when it was logged, so it survives a rename or removal. */
+  personName: string;
+  siteId: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  note?: string;
+  receivedAt: number;
+  /** Set when an owner changed it from the dashboard. */
+  editedAt?: number;
+  editedBy?: string;
+}
+
+/** What an owner can set when adding or correcting an entry. */
+export type InventoryChanges = Pick<InventoryEntry, "siteId" | "name" | "quantity" | "unit" | "note">;

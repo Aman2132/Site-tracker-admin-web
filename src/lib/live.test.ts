@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { deriveCrew, settleSessions, toEvent, toPhoto } from "./live.ts";
+import { filesOf, storagePathFromUrl } from "./photoFiles.ts";
 import { DAY, HOUR, MINUTE, TZ_OFFSET, dayStart } from "./time.ts";
 
 const NOW = Date.UTC(2026, 9, 5, 10, 0);
@@ -61,6 +62,12 @@ test("old photos without site, size or preview still map", () => {
   assert.equal(photo.siteId, "");
   assert.equal(photo.thumbUrl, "https://a/b.jpg");
   assert.deepEqual([photo.width, photo.height], [1600, 1200]);
+  assert.equal(photo.note, undefined);
+});
+
+test("photo note is kept when present, dropped when blank", () => {
+  assert.equal(toPhoto("x", { note: "  Cracked slab  " }).note, "Cracked slab");
+  assert.equal(toPhoto("x", { note: "   " }).note, undefined);
 });
 
 test("events use the recorded type, else guess from legacy text", () => {
@@ -77,4 +84,66 @@ test("days start at midnight Nepal time (UTC+5:45), not India time", () => {
   assert.equal(dayStart(midnightNepal), midnightNepal);
   // ...and one minute earlier still belongs to the previous Nepal day.
   assert.equal(dayStart(midnightNepal - MINUTE), midnightNepal - DAY);
+});
+
+const URL_BASE = "https://abc.supabase.co/storage/v1/object/public/Photos";
+
+test("a photo's files are its original and its thumbnail, found from the record's URLs", () => {
+  const photo = { fullUrl: `${URL_BASE}/w1/local-1-abc.jpg`, thumbUrl: `${URL_BASE}/w1/local-1-abc_thumb.jpg` };
+  assert.deepEqual(filesOf(photo), ["w1/local-1-abc.jpg", "w1/local-1-abc_thumb.jpg"]);
+});
+
+test("a record whose thumbnail is the original (older photos, videos) lists the file once", () => {
+  const url = `${URL_BASE}/w1/clip.mp4`;
+  assert.deepEqual(filesOf({ fullUrl: url, thumbUrl: url }), ["w1/clip.mp4"]);
+});
+
+test("a URL from somewhere else is not mistaken for a file in our bucket", () => {
+  assert.equal(storagePathFromUrl("https://example.com/photos/a.jpg"), null);
+  assert.deepEqual(filesOf({ fullUrl: "https://example.com/a.jpg", thumbUrl: "https://example.com/a.jpg" }), []);
+});
+
+test("encoded characters and cache-busting queries in a URL are resolved to the real path", () => {
+  assert.equal(storagePathFromUrl(`${URL_BASE}/w%201/a%20b.jpg?t=123`), "w 1/a b.jpg");
+});
+
+import { changesProblem, toCsv, toInventory, totalsByItem } from "./inventory.ts";
+
+const item = (id: string, name: string, quantity: number, unit: string, receivedAt: number) =>
+  toInventory(id, { personId: "p", personName: "Ram", siteId: "s", name, quantity, unit, receivedAt });
+
+test("inventory totals group by item and unit, ignoring case and spacing, keeping units apart", () => {
+  const totals = totalsByItem([
+    item("1", "Cement", 40, "bags", 1),
+    item("2", " cement ", 10, "Bags", 2),
+    item("3", "Cement", 500, "kg", 3),
+    item("4", "Sand", 2.5, "tonne", 4),
+  ]);
+  assert.deepEqual(
+    totals.map(t => [t.name, t.unit, t.quantity, t.deliveries]),
+    [
+      ["cement", "bags", 50, 2],
+      ["Cement", "kg", 500, 1],
+      ["Sand", "tonne", 2.5, 1],
+    ]
+  );
+});
+
+test("inventory mapping drops a blank note and keeps edit stamps", () => {
+  const e = toInventory("x", { name: "Rebar", quantity: 5, unit: "pcs", note: "  ", editedAt: 9, receivedAt: 1 });
+  assert.equal(e.note, undefined);
+  assert.equal(e.editedAt, 9);
+});
+
+test("owner changes are checked like the rules check them", () => {
+  const ok = { siteId: "s", name: "Cement", quantity: 4, unit: "bags" };
+  assert.equal(changesProblem(ok), null);
+  assert.match(changesProblem({ ...ok, quantity: 0 }) ?? "", /above 0/);
+  assert.match(changesProblem({ ...ok, quantity: NaN }) ?? "", /above 0/);
+  assert.match(changesProblem({ ...ok, unit: " " }) ?? "", /unit/);
+  assert.match(changesProblem({ ...ok, siteId: "" }) ?? "", /site/);
+});
+
+test("csv quotes cells with commas, quotes and line breaks", () => {
+  assert.equal(toCsv(["a", "b"], [["x,y", 'say "hi"'], ["line\nbreak", 3]]), 'a,b\n"x,y","say ""hi"""\n"line\nbreak",3');
 });

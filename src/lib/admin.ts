@@ -5,6 +5,8 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
+  deleteDoc,
+  deleteField,
   doc,
   getFirestore,
   serverTimestamp,
@@ -15,7 +17,7 @@ import {
 
 import { FIREBASE_CONFIG, firebase } from "./firebase";
 
-import type { AppRole, EventKind, SiteStatus } from "../types/domain";
+import type { AppRole, EventKind, InventoryChanges, SitePhoto, SiteStatus } from "../types/domain";
 
 /**
  * Everything the dashboard writes. Each function is one admin action; the
@@ -153,4 +155,71 @@ export async function inviteCrew(input: NewCrewInput): Promise<string> {
 /** Reset links expire (about an hour) and work once, so an unaccepted invite needs a fresh one. */
 export async function resendInvite(email: string): Promise<void> {
   await sendPasswordResetEmail(firebase().auth, email);
+}
+
+export interface PhotoDeleteResult {
+  deleted: string[];
+  failed: { id: string; reason: string }[];
+}
+
+/**
+ * 🚨 Removes photos completely: the original file, its thumbnail AND the
+ * Firestore record. A browser can't be trusted with the file store's delete key,
+ * so this asks the dashboard's own server route (/api/photos/delete), which
+ * checks you are an owner, deletes the files first and the record last, and
+ * reports each photo separately. See docs/READ-BEFORE-BUILDING-PHOTO-DELETION.md
+ * in the app repo.
+ */
+export async function deletePhotos(photos: Pick<SitePhoto, "id">[]): Promise<PhotoDeleteResult> {
+  const user = firebase().auth.currentUser;
+  if (!user) throw new Error("Sign in again.");
+  const response = await fetch("/api/photos/delete", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${await user.getIdToken()}` },
+    body: JSON.stringify({ ids: photos.map(photo => photo.id) }),
+  });
+  const data = (await response.json().catch(() => ({}))) as Partial<PhotoDeleteResult> & { error?: string };
+  if (!response.ok) throw new Error(data.error ?? `Deleting failed (${response.status}).`);
+  return { deleted: data.deleted ?? [], failed: data.failed ?? [] };
+}
+
+/**
+ * Corrects an entry the crew logged. Stamps who changed it and when, which the
+ * app shows the crew as "Corrected by admin".
+ */
+export async function updateInventoryEntry(id: string, changes: InventoryChanges): Promise<void> {
+  const { auth, db } = firebase();
+  const note = changes.note?.trim();
+  await updateDoc(doc(db, "inventory", id), {
+    siteId: changes.siteId,
+    name: changes.name.trim().replace(/\s+/g, " "),
+    quantity: changes.quantity,
+    unit: changes.unit.trim(),
+    note: note ? note : deleteField(),
+    editedAt: Date.now(),
+    editedBy: auth.currentUser?.uid ?? "",
+  });
+}
+
+export async function deleteInventoryEntry(id: string): Promise<void> {
+  await deleteDoc(doc(firebase().db, "inventory", id));
+}
+
+/** An owner logging a delivery themselves, attributed to the owner. */
+export async function addInventoryEntry(changes: InventoryChanges, personName: string): Promise<void> {
+  const { auth, db } = firebase();
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Sign in again.");
+  const note = changes.note?.trim();
+  await addDoc(collection(db, "inventory"), {
+    personId: uid,
+    personName,
+    siteId: changes.siteId,
+    name: changes.name.trim().replace(/\s+/g, " "),
+    quantity: changes.quantity,
+    unit: changes.unit.trim(),
+    ...(note ? { note } : {}),
+    receivedAt: Date.now(),
+    createdAt: serverTimestamp(),
+  });
 }

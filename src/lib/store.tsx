@@ -7,12 +7,14 @@ import { toast } from "sonner";
 
 import * as admin from "./admin";
 import { firebase } from "./firebase";
+import { toInventory } from "./inventory";
 import { deriveCrew, settleSessions, toEvent, toPhoto, toSite } from "./live";
 import { DAY, dayStart } from "./time";
 
 import type {
   ActivityEvent,
   CrewMember,
+  InventoryEntry,
   PersonDoc,
   PositionDoc,
   PresenceSession,
@@ -25,6 +27,8 @@ const SESSION_DAYS = 15;
 /** The newest this many photos / events are loaded; older ones aren't shown. */
 const PHOTO_LIMIT = 300;
 const EVENT_LIMIT = 300;
+/** ponytail: newest 2000 inventory entries; page or aggregate server-side once a project logs more. */
+const INVENTORY_LIMIT = 2000;
 /** Statuses go stale as time passes with no new data, so they are re-derived this often. */
 const TICK_MS = 30_000;
 /** The mobile app's old single-site document; it has a location and isn't a project. */
@@ -47,6 +51,7 @@ interface LiveStore {
   events: ActivityEvent[];
   photos: SitePhoto[];
   sessions: PresenceSession[];
+  inventory: InventoryEntry[];
   createSite: typeof admin.createSite;
   setSiteStatus: typeof admin.setSiteStatus;
   setSiteCrew: typeof admin.setSiteCrew;
@@ -54,6 +59,10 @@ interface LiveStore {
   setCrewActive: typeof admin.setCrewActive;
   inviteCrew: typeof admin.inviteCrew;
   resendInvite: typeof admin.resendInvite;
+  deletePhotos: typeof admin.deletePhotos;
+  addInventoryEntry: typeof admin.addInventoryEntry;
+  updateInventoryEntry: typeof admin.updateInventoryEntry;
+  deleteInventoryEntry: typeof admin.deleteInventoryEntry;
 }
 
 const LiveStoreContext = createContext<LiveStore | null>(null);
@@ -65,6 +74,7 @@ export function LiveStoreProvider({ children }: { children: ReactNode }) {
   const [rawSessions, setRawSessions] = useState<PresenceSession[]>([]);
   const [photos, setPhotos] = useState<SitePhoto[]>([]);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [inventory, setInventory] = useState<InventoryEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -123,6 +133,11 @@ export function LiveStoreProvider({ children }: { children: ReactNode }) {
         snap => setEvents(snap.docs.map(d => toEvent(d.id, d.data(), Date.now()))),
         fail("activity")
       ),
+      onSnapshot(
+        query(collection(db, "inventory"), orderBy("receivedAt", "desc"), limit(INVENTORY_LIMIT)),
+        snap => setInventory(snap.docs.map(d => toInventory(d.id, d.data()))),
+        fail("inventory")
+      ),
     ];
     return () => unsubscribers.forEach(unsubscribe => unsubscribe());
   }, []);
@@ -140,9 +155,10 @@ export function LiveStoreProvider({ children }: { children: ReactNode }) {
       events,
       photos,
       sessions,
+      inventory,
       ...ACTIONS,
     }),
-    [people, positions, sites, now, error, crew, events, photos, sessions]
+    [people, positions, sites, now, error, crew, events, photos, sessions, inventory]
   );
 
   return <LiveStoreContext.Provider value={value}>{children}</LiveStoreContext.Provider>;
@@ -156,6 +172,10 @@ const ACTIONS = {
   setCrewActive: admin.setCrewActive,
   inviteCrew: admin.inviteCrew,
   resendInvite: admin.resendInvite,
+  deletePhotos: admin.deletePhotos,
+  addInventoryEntry: admin.addInventoryEntry,
+  updateInventoryEntry: admin.updateInventoryEntry,
+  deleteInventoryEntry: admin.deleteInventoryEntry,
 };
 
 export function useLiveStore(): LiveStore {

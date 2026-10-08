@@ -70,3 +70,11 @@ what changed (within about 30 minutes of the last visit) instead of every
 document. The saved copy is wiped when you sign out. The cache is set up in
 `src/lib/firebase.ts`; the sessions query uses a cutoff rounded to the start of
 the day (`src/lib/store.tsx`) so the saved copy can resume it.
+
+## Deleting photos
+
+Photos tab → Select (or open a photo → Delete). Removes the original file, the thumbnail and the Firestore record, via the server route `/api/photos/delete` (owners only; files first, record last).
+
+- Needs `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` (Supabase → Settings → API; **no** `NEXT_PUBLIC_` prefix, never commit it). Restart after adding.
+- Needs the app repo's `firestore.rules` deployed (`firebase deploy --only firestore:rules`).
+- Hosting must run a Node server (not a static export).

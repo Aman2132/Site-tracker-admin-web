@@ -24,7 +24,7 @@ import { ActivityFeed } from "@/components/domain/ActivityFeed";
 import { AssignSitesSheet } from "@/components/domain/AssignSheet";
 import { BatteryMeter } from "@/components/domain/BatteryMeter";
 import { CrewMap } from "@/components/domain/CrewMap";
-import { Lightbox } from "@/components/domain/Lightbox";
+import { DeletableLightbox } from "@/components/domain/DeletableLightbox";
 import { EmptyState, Panel } from "@/components/domain/Panel";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
 import { PhotoThumb } from "@/components/domain/PhotoThumb";
@@ -286,7 +286,7 @@ export function CrewProfileView({ id }: { id: string }) {
       </Stagger>
 
       <AssignSitesSheet key={assign.key} personId={assign.id} open={assign.open} onOpenChange={assign.setOpen} />
-      <Lightbox photos={data.photos.slice(0, 12)} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
+      <DeletableLightbox photos={data.photos.slice(0, 12)} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
     </>
   );
 }

@@ -9,7 +9,7 @@ import { useAdmin } from "@/components/auth/AuthProvider";
 import { AttendanceTrend } from "@/components/charts/AttendanceTrend";
 import { BarCompare } from "@/components/charts/BarCompare";
 import { ActivityFeed } from "@/components/domain/ActivityFeed";
-import { Lightbox } from "@/components/domain/Lightbox";
+import { DeletableLightbox } from "@/components/domain/DeletableLightbox";
 import { PageHeader } from "@/components/domain/PageHeader";
 import { Panel } from "@/components/domain/Panel";
 import { AvatarStack, PersonAvatar } from "@/components/domain/PersonAvatar";
@@ -353,7 +353,7 @@ export function OverviewView() {
         </StaggerItem>
       </Stagger>
 
-      <Lightbox photos={recentPhotos} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
+      <DeletableLightbox photos={recentPhotos} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
     </>
   );
 }

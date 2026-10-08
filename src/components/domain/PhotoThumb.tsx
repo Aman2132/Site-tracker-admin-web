@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin, Play } from "lucide-react";
+import { Check, MapPin, Play } from "lucide-react";
 import { motion } from "motion/react";
 import Image from "next/image";
 import { useState } from "react";
@@ -24,12 +24,19 @@ export function PhotoThumb({
   className,
   showMeta = true,
   index = 0,
+  selecting = false,
+  selected = false,
+  onToggle,
 }: {
   photo: SitePhoto;
   onOpen: (photo: SitePhoto) => void;
   className?: string;
   showMeta?: boolean;
   index?: number;
+  /** In selection mode a click toggles the photo instead of opening it. */
+  selecting?: boolean;
+  selected?: boolean;
+  onToggle?: (photo: SitePhoto) => void;
 }) {
   const { personById, siteById } = useLookups();
   const [loaded, setLoaded] = useState(false);
@@ -39,13 +46,14 @@ export function PhotoThumb({
   return (
     <motion.button
       type="button"
-      onClick={() => onOpen(photo)}
+      onClick={() => (selecting && onToggle ? onToggle(photo) : onOpen(photo))}
       initial={{ opacity: 0, y: 16, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1], delay: Math.min(index, 18) * 0.03 }}
       whileHover="hover"
       className={cn(
-        "group relative block w-full overflow-hidden rounded-2xl bg-muted text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        "group relative block w-full overflow-hidden rounded-lg bg-muted text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        selected && "ring-2 ring-primary",
         className
       )}
       aria-label={`${photo.task} by ${person?.name ?? "unknown"}`}
@@ -85,8 +93,23 @@ export function PhotoThumb({
 
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-80 transition-opacity duration-300 group-hover:opacity-100" />
 
+      {selecting && (
+        <span
+          className={cn(
+            "absolute top-2.5 left-2.5 z-10 flex size-6 items-center justify-center rounded-md border-2",
+            selected ? "border-primary bg-primary text-primary-foreground" : "border-white bg-black/30"
+          )}
+        >
+          {selected && <Check className="size-4" strokeWidth={3} />}
+        </span>
+      )}
       {photo.mediaType === "video" && (
-        <span className="absolute top-3 left-3 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-bold text-white backdrop-blur">
+        <span
+          className={cn(
+            "absolute top-3 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-bold text-white backdrop-blur",
+            selecting ? "left-11" : "left-3"
+          )}
+        >
           <Play className="size-3 fill-white" /> {formatDuration(photo.durationMs ?? 0)}
         </span>
       )}
@@ -99,6 +122,7 @@ export function PhotoThumb({
       {showMeta && (
         <div className="absolute inset-x-0 bottom-0 p-3 text-white">
           <div className="truncate text-sm font-bold drop-shadow">{photo.task}</div>
+          {photo.note && <div className="mt-0.5 line-clamp-2 text-[11px] text-white/85">{photo.note}</div>}
           <div className="mt-1 flex items-center gap-1.5 text-[11px] text-white/80">
             {person && <PersonAvatar person={person} size="xs" className="[&>span]:ring-0" />}
             <span className="truncate">{person?.name.split(" ")[0]}</span>

@@ -10,6 +10,7 @@ import {
   Hash,
   MapPin,
   Play,
+  Trash2,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -41,11 +42,14 @@ export function Lightbox({
   openId,
   onClose,
   onChange,
+  onDelete,
 }: {
   photos: SitePhoto[];
   openId: string | null;
   onClose: () => void;
   onChange: (id: string) => void;
+  /** When given, the viewer shows a Delete button that calls this with the open photo. */
+  onDelete?: (photo: SitePhoto) => void;
 }) {
   const mounted = useMounted();
   const index = photos.findIndex(p => p.id === openId);
@@ -102,7 +106,7 @@ export function Lightbox({
             <NavButton side="right" onClick={() => step(1)} />
           </div>
 
-          <MetaPanel photo={photo} onClose={onClose} />
+          <MetaPanel photo={photo} onClose={onClose} onDelete={onDelete} />
         </motion.div>
       )}
     </AnimatePresence>,
@@ -177,7 +181,15 @@ function NavButton({ side, onClick }: { side: "left" | "right"; onClick: () => v
   );
 }
 
-function MetaPanel({ photo, onClose }: { photo: SitePhoto; onClose: () => void }) {
+function MetaPanel({
+  photo,
+  onClose,
+  onDelete,
+}: {
+  photo: SitePhoto;
+  onClose: () => void;
+  onDelete?: (photo: SitePhoto) => void;
+}) {
   const { personById, siteById } = useLookups();
   const person = personById.get(photo.personId);
   const site = siteById.get(photo.siteId);
@@ -224,6 +236,15 @@ function MetaPanel({ photo, onClose }: { photo: SitePhoto; onClose: () => void }
                 </div>
               </div>
             </Link>
+          )}
+
+          {photo.note && (
+            <div className="rounded-2xl border border-border p-3 text-sm">
+              <div className="text-xs text-muted-foreground">
+                Note{person ? ` from ${person.name.split(" ")[0]}` : ""}
+              </div>
+              <p className="mt-1 whitespace-pre-wrap break-words">{photo.note}</p>
+            </div>
           )}
 
           <dl className="space-y-3.5 text-sm">
@@ -284,6 +305,11 @@ function MetaPanel({ photo, onClose }: { photo: SitePhoto; onClose: () => void }
           >
             <Download /> Open original ({photo.width}×{photo.height})
           </a>
+          {onDelete && (
+            <Button variant="outline" size="lg" className="w-full text-danger hover:text-danger" onClick={() => onDelete(photo)}>
+              <Trash2 /> Delete photo
+            </Button>
+          )}
         </motion.div>
       </AnimatePresence>
     </motion.aside>

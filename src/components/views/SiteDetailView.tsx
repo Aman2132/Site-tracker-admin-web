@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
 import { BarCompare } from "@/components/charts/BarCompare";
 import { ActivityFeed } from "@/components/domain/ActivityFeed";
 import { AssignCrewSheet } from "@/components/domain/AssignSheet";
-import { Lightbox } from "@/components/domain/Lightbox";
+import { DeletableLightbox } from "@/components/domain/DeletableLightbox";
 import { EmptyState, Panel } from "@/components/domain/Panel";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
 import { PhotoThumb } from "@/components/domain/PhotoThumb";
@@ -258,7 +258,7 @@ export function SiteDetailView({ id }: { id: string }) {
       </Stagger>
 
       <AssignCrewSheet key={assign.key} siteId={assign.id} open={assign.open} onOpenChange={assign.setOpen} />
-      <Lightbox photos={gallery} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
+      <DeletableLightbox photos={gallery} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
     </>
   );
 }

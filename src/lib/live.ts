@@ -145,6 +145,7 @@ export function toPhoto(id: string, data: Record<string, unknown>): SitePhoto {
     personId: String(data.personId ?? ""),
     siteId: typeof data.siteId === "string" ? data.siteId : "",
     task: String(data.task ?? ""),
+    note: typeof data.note === "string" && data.note.trim() ? data.note.trim() : undefined,
     takenAt: Number(data.takenAt ?? 0),
     lat: Number(data.lat ?? 0),
     lng: Number(data.lng ?? 0),
