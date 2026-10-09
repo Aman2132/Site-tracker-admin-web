@@ -43,7 +43,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatHours, timeAgo } from "@/lib/format";
+import { formatHours, roleLabel, timeAgo } from "@/lib/format";
 import { hoursOnDay } from "@/lib/insights";
 import { dayStart } from "@/lib/time";
 import { attempt, useLiveStore, useLookups, useNow } from "@/lib/store";
@@ -84,7 +84,7 @@ function CrewActions({ person, onAssign }: { person: CrewMember; onAssign: () =>
           <DropdownMenuItem
             onClick={async () => {
               if (!person.email) return toast.error("No email on file for this person.");
-              if (await attempt("Resending the invite", () => resendInvite(person.email)))
+              if (await attempt("Resending the invite", () => resendInvite(person.email), { targetType: "person", targetId: person.id }))
                 toast.success("Invite re-sent", { description: `New set-password link sent to ${person.email}.` });
             }}
           >
@@ -95,7 +95,7 @@ function CrewActions({ person, onAssign }: { person: CrewMember; onAssign: () =>
         <DropdownMenuItem
           variant={deactivated ? "default" : "destructive"}
           onClick={async () => {
-            if (!(await attempt(deactivated ? "Reactivating" : "Deactivating", () => setCrewActive(person.id, person.name, deactivated)))) return;
+            if (!(await attempt(deactivated ? "Reactivating" : "Deactivating", () => setCrewActive(person.id, person.name, deactivated), { targetType: "person", targetId: person.id }))) return;
             toast(deactivated ? `${person.name} reactivated` : `${person.name} deactivated`, {
               description: deactivated ? "They can sign in again." : "They're signed out and can't sign back in.",
             });
@@ -291,7 +291,7 @@ export function CrewView() {
                             <div className="truncate font-bold transition-colors group-hover:text-primary">{p.name}</div>
                             <div className="truncate text-xs text-muted-foreground">
                               {[p.jobTitle, p.team].filter(Boolean).join(" · ")}
-                              {p.appRole === "owner" && <span className="ml-1.5 rounded bg-accent px-1 text-[10px] font-bold text-primary">ADMIN</span>}
+                              {p.appRole !== "worker" && <span className="ml-1.5 rounded bg-accent px-1 text-[10px] font-bold text-primary uppercase">{roleLabel(p.appRole)}</span>}
                             </div>
                           </div>
                         </div>

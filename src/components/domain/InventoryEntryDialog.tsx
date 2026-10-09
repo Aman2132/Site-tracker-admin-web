@@ -28,8 +28,8 @@ export function InventoryEntryDialog({
   entry: InventoryEntry | null;
   sites: Site[];
   defaultSiteId?: string;
-  /** Resolves true when saved. */
-  onSave: (changes: InventoryChanges) => Promise<boolean>;
+  /** Resolves true when saved. `reason` goes only to the superadmin's audit trail. */
+  onSave: (changes: InventoryChanges, reason: string) => Promise<boolean>;
   onOpenChange: (open: boolean) => void;
 }) {
   return (
@@ -61,7 +61,7 @@ function EntryForm({
   entry: InventoryEntry | null;
   sites: Site[];
   defaultSiteId?: string;
-  onSave: (changes: InventoryChanges) => Promise<boolean>;
+  onSave: (changes: InventoryChanges, reason: string) => Promise<boolean>;
   onClose: () => void;
 }) {
   const [siteId, setSiteId] = useState(entry?.siteId ?? defaultSiteId ?? sites[0]?.id ?? "");
@@ -69,16 +69,29 @@ function EntryForm({
   const [quantity, setQuantity] = useState(entry ? String(entry.quantity) : "");
   const [unit, setUnit] = useState(entry?.unit ?? "");
   const [note, setNote] = useState(entry?.note ?? "");
+  const [used, setUsed] = useState(entry ? String(entry.usedQuantity) : "0");
+  const [reason, setReason] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
-    const changes = { siteId, name, quantity: Number(quantity.replace(",", ".")), unit, note };
+    const changes = {
+      siteId,
+      name,
+      quantity: Number(quantity.replace(",", ".")),
+      unit,
+      note,
+      ...(entry ? { usedQuantity: Number(used.replace(",", ".") || "0") } : {}),
+      // Pieces stay only while the total is unchanged; a new total would contradict them.
+      ...(entry?.packCount && entry.packSize && Number(quantity.replace(",", ".")) === entry.quantity
+        ? { packCount: entry.packCount, packSize: entry.packSize }
+        : {}),
+    };
     const issue = changesProblem(changes);
     setProblem(issue);
     if (issue) return;
     setBusy(true);
-    const saved = await onSave(changes);
+    const saved = await onSave(changes, reason);
     setBusy(false);
     if (saved) onClose();
   };
@@ -151,6 +164,22 @@ function EntryForm({
         </Field>
       </div>
 
+      {entry && (
+        <Field
+          label="Used so far"
+          htmlFor="inv-used"
+          hint={entry.usage.length ? `Crew logged usage ${entry.usage.length} time(s).` : "Nothing logged as used yet."}
+        >
+          <TextInput
+            id="inv-used"
+            inputMode="decimal"
+            value={used}
+            onChange={e => setUsed(e.target.value)}
+            className="w-40 text-base font-semibold"
+          />
+        </Field>
+      )}
+
       <Field label="Note (optional)" htmlFor="inv-note">
         <Textarea
           id="inv-note"
@@ -162,6 +191,18 @@ function EntryForm({
           className="rounded-lg bg-card"
         />
       </Field>
+
+      {entry && (
+        <Field label="Reason for the change (optional)" htmlFor="inv-reason" hint="Only the superadmin sees this, with your name.">
+          <TextInput
+            id="inv-reason"
+            maxLength={500}
+            placeholder="e.g. Supplier short-delivered 5 bags"
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+          />
+        </Field>
+      )}
 
       {problem && <p className="text-sm font-medium text-danger">{problem}</p>}
 

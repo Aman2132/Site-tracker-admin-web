@@ -50,7 +50,8 @@ export async function requireOwner(idToken: string): Promise<string> {
   const response = await fetch(firestoreUrl(`people/${uid}`), { headers: bearer(idToken), cache: "no-store" });
   if (!response.ok) throw new HttpError(403, "Couldn't confirm that you're an admin.");
   const fields = ((await response.json()) as { fields?: ProfileFields }).fields ?? {};
-  const isOwner = fields.appRole?.stringValue === "owner" && fields.active?.booleanValue !== false;
+  const role = fields.appRole?.stringValue;
+  const isOwner = (role === "owner" || role === "superadmin") && fields.active?.booleanValue !== false;
   if (!isOwner) throw new HttpError(403, "Only an active owner can delete photos.");
   return uid;
 }

@@ -14,7 +14,7 @@ const END_HOUR = 22;
 const SPAN = END_HOUR - START_HOUR;
 const pos = (t: number) => Math.min(100, Math.max(0, ((hourOfDay(t) - START_HOUR) / SPAN) * 100));
 
-const END_LABEL = { "signed-off": "signed off", paused: "paused sharing", timeout: "lost signal" } as const;
+const END_LABEL = { "signed-off": "signed off", paused: "paused sharing", admin: "corrected", timeout: "lost signal" } as const;
 
 /** Hour ruler shared by every timeline row. */
 export function TimelineRuler({ className }: { className?: string }) {

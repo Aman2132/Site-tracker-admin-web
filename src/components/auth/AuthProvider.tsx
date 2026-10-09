@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const profile = snap.exists() ? ({ id: snap.id, ...snap.data() } as PersonDoc) : null;
         if (!profile) setState({ status: "denied", reason: NO_PROFILE, email });
         else if (profile.active === false) setState({ status: "denied", reason: DEACTIVATED, email });
-        else if (profile.appRole !== "owner") setState({ status: "denied", reason: NOT_OWNER, email });
+        else if (profile.appRole !== "owner" && profile.appRole !== "superadmin") setState({ status: "denied", reason: NOT_OWNER, email });
         else setState({ status: "ready", uid: user.uid, email, profile });
       } catch (e) {
         setState({ status: "denied", reason: e instanceof Error ? e.message : "Couldn't load your profile.", email });
@@ -79,6 +79,12 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
+}
+
+/** True for the superadmin: an owner who can also grant/revoke admin and read the audit log. */
+export function useIsSuperadmin(): boolean {
+  const { state } = useAuth();
+  return state.status === "ready" && state.profile.appRole === "superadmin";
 }
 
 /** The signed-in owner. Only call below AuthGate, which renders children only once someone is ready. */

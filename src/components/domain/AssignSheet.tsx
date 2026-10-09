@@ -28,7 +28,7 @@ export function AssignSitesSheet({
 
   const save = async () => {
     if (!person) return;
-    if (!(await attempt("Updating sites", () => setPersonSites(person.id, selected)))) return;
+    if (!(await attempt("Updating sites", () => setPersonSites(person.id, selected), { targetType: "person", targetId: person.id }))) return;
     toast.success(`Sites updated for ${person.name}`, { description: `${selected.length} site${selected.length === 1 ? "" : "s"} assigned.` });
     onOpenChange(false);
   };
@@ -112,7 +112,7 @@ export function AssignCrewSheet({
     const before = assignable.filter(c => c.siteIds.includes(site.id)).map(c => c.id);
     const added = selected.filter(id => !before.includes(id));
     const removed = before.filter(id => !selected.includes(id));
-    if (!(await attempt("Updating crew", () => setSiteCrew(site.id, added, removed)))) return;
+    if (!(await attempt("Updating crew", () => setSiteCrew(site.id, added, removed), { targetType: "site", targetId: site.id }))) return;
     toast.success(`Crew updated for ${site.name}`, { description: `${selected.length} people assigned.` });
     onOpenChange(false);
   };

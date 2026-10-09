@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { deriveCrew, settleSessions, toEvent, toPhoto } from "./live.ts";
 import { filesOf, storagePathFromUrl } from "./photoFiles.ts";
-import { DAY, HOUR, MINUTE, TZ_OFFSET, dayStart } from "./time.ts";
+import { DAY, HOUR, MINUTE, TZ_OFFSET, dayStart, fromLocalInput, sessionTimesProblem, toLocalInput } from "./time.ts";
 
 const NOW = Date.UTC(2026, 9, 5, 10, 0);
 const person = { id: "p", name: "Pooja", role: "Helper", color: "#a142f4", appRole: "worker" as const };
@@ -146,4 +146,35 @@ test("owner changes are checked like the rules check them", () => {
 
 test("csv quotes cells with commas, quotes and line breaks", () => {
   assert.equal(toCsv(["a", "b"], [["x,y", 'say "hi"'], ["line\nbreak", 3]]), 'a,b\n"x,y","say ""hi"""\n"line\nbreak",3');
+});
+
+test("datetime-local values round-trip in Nepal time", () => {
+  assert.equal(toLocalInput(Date.UTC(2026, 9, 5, 3, 15)), "2026-10-05T09:00");
+  assert.equal(fromLocalInput("2026-10-05T09:00"), Date.UTC(2026, 9, 5, 3, 15));
+  assert.ok(Number.isNaN(fromLocalInput("")));
+});
+
+test("a corrected check-out can't come before the check-in", () => {
+  assert.equal(sessionTimesProblem(NOW - HOUR, NOW, NOW), null);
+  assert.equal(sessionTimesProblem(NOW - HOUR, undefined, NOW), null);
+  assert.match(sessionTimesProblem(NOW - HOUR, NOW - 2 * HOUR, NOW) ?? "", /after check-in/);
+  assert.match(sessionTimesProblem(NaN, undefined, NOW) ?? "", /check-in/);
+  assert.match(sessionTimesProblem(NOW + HOUR, undefined, NOW) ?? "", /future/);
+});
+
+test("an admin-closed session is left as it is", () => {
+  const edited = [{ id: "a", personId: "p", siteId: "s", start: NOW - 5 * HOUR, end: NOW - 4 * HOUR, endReason: "admin" as const, editedAt: NOW }];
+  assert.deepEqual(settleSessions(edited, {}, NOW), edited);
+});
+
+test("inventory usage maps from the doc and totals add received, used and left", () => {
+  const delivered = toInventory("u", {
+    name: "Cement", quantity: 40, unit: "bags", receivedAt: 1, usedQuantity: 15,
+    usage: [{ quantity: 10, at: 2, note: " slab " }, { quantity: 5, at: 3 }, { bad: true }],
+  });
+  assert.deepEqual(delivered.usage, [{ quantity: 10, at: 2, note: "slab" }, { quantity: 5, at: 3, note: undefined }]);
+  const [t] = totalsByItem([delivered, toInventory("v", { name: "cement", quantity: 10, unit: "bags", receivedAt: 4 })]);
+  assert.deepEqual([t.quantity, t.used, t.left], [50, 15, 35]);
+  // Over-logged usage never shows negative stock.
+  assert.equal(totalsByItem([toInventory("w", { name: "Sand", quantity: 1, unit: "t", usedQuantity: 3 })])[0].left, 0);
 });

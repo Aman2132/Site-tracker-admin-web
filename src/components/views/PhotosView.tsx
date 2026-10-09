@@ -99,7 +99,11 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
 
   const confirmDelete = async () => {
     setDeleting(true);
-    const outcome = await attempt("Deleting photos", () => deletePhotos(pendingDelete));
+    const outcome = await attempt("Deleting photos", () => deletePhotos(pendingDelete), {
+      targetType: "photo",
+      targetId: pendingDelete.length === 1 ? pendingDelete[0].id : undefined,
+      note: `${pendingDelete.length} photo(s)`,
+    });
     setDeleting(false);
     setPendingDelete([]);
     if (!outcome) return;

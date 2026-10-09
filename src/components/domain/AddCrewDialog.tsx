@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { useIsSuperadmin } from "@/components/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { EASE_OUT } from "@/components/motion";
@@ -43,6 +44,8 @@ export function AddCrewDialog({
   presetSiteId?: string;
 }) {
   const { sites, crew, inviteCrew } = useLiveStore();
+  // Granting admin is superadmin-only (firestore.rules); owners invite workers.
+  const isSuperadmin = useIsSuperadmin();
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
@@ -80,7 +83,8 @@ export function AddCrewDialog({
     setBusy(true);
     // A rotating colour so neighbours in the list are easy to tell apart.
     const result = await attempt("Creating the account", () =>
-      inviteCrew({ ...form, email: form.email.trim(), name: form.name.trim(), color: CREW_COLORS[crew.length % CREW_COLORS.length] })
+      inviteCrew({ ...form, email: form.email.trim(), name: form.name.trim(), color: CREW_COLORS[crew.length % CREW_COLORS.length] }),
+      { targetType: "person", note: `${form.name.trim()} <${form.email.trim()}> as ${form.appRole}` }
     );
     setBusy(false);
     if (!result) return;
@@ -176,17 +180,19 @@ export function AddCrewDialog({
 
                 {step === 1 && (
                   <>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className={cn("grid gap-3", isSuperadmin && "grid-cols-2")}>
                       <SelectCard selected={form.appRole === "worker"} onClick={() => set("appRole", "worker")}>
                         <HardHat className="size-5 text-warning" />
                         <div className="mt-2 font-bold">Worker</div>
                         <p className="mt-0.5 text-xs text-muted-foreground">Shares location, takes geotagged photos.</p>
                       </SelectCard>
-                      <SelectCard selected={form.appRole === "owner"} onClick={() => set("appRole", "owner")}>
-                        <ShieldCheck className="size-5 text-primary" />
-                        <div className="mt-2 font-bold">Admin</div>
-                        <p className="mt-0.5 text-xs text-muted-foreground">Sees everything, manages sites and crew.</p>
-                      </SelectCard>
+                      {isSuperadmin && (
+                        <SelectCard selected={form.appRole === "owner"} onClick={() => set("appRole", "owner")}>
+                          <ShieldCheck className="size-5 text-primary" />
+                          <div className="mt-2 font-bold">Admin</div>
+                          <p className="mt-0.5 text-xs text-muted-foreground">Sees everything, manages sites and crew.</p>
+                        </SelectCard>
+                      )}
                     </div>
                     <Field label="Job title">
                       <div className="flex flex-wrap gap-2">

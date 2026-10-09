@@ -41,7 +41,10 @@ export function CreateSiteDialog({ open, onOpenChange }: { open: boolean; onOpen
       return;
     }
     setBusy(true);
-    const result = await attempt("Creating the site", () => createSite({ ...form, name: form.name.trim(), manager: form.manager.trim() }));
+    const result = await attempt("Creating the site", () => createSite({ ...form, name: form.name.trim(), manager: form.manager.trim() }), {
+      targetType: "site",
+      note: form.name.trim(),
+    });
     setBusy(false);
     if (!result) return;
     toast.success(`${form.name.trim()} created`, {

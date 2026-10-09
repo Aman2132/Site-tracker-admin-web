@@ -17,7 +17,7 @@ import {
 
 import { FIREBASE_CONFIG, firebase } from "./firebase";
 
-import type { AppRole, EventKind, InventoryChanges, SitePhoto, SiteStatus } from "../types/domain";
+import type { AppRole, EventKind, InventoryChanges, SessionEndReason, SitePhoto, SiteStatus } from "../types/domain";
 
 /**
  * Everything the dashboard writes. Each function is one admin action; the
@@ -145,11 +145,43 @@ export async function inviteCrew(input: NewCrewInput): Promise<string> {
     phone: input.phone,
     team: input.team,
     invitedAt: Date.now(),
-    ...(input.appRole === "owner" ? { appRole: "owner" } : {}),
   });
   await sendPasswordResetEmail(auth, input.email);
   await logEvent(`Invite sent to ${input.name}`, "crew", { personId: uid, siteId: input.siteIds[0] });
+  // Last, and on its own: the rules let only a superadmin grant owner, touching appRole alone.
+  // If it fails the person still has a working worker account.
+  if (input.appRole === "owner") await setAppRole(uid, "owner");
   return uid;
+}
+
+/** Grant / revoke admin. Superadmin only (firestore.rules); writes appRole and nothing else. */
+export async function setAppRole(personId: string, appRole: "owner" | "worker"): Promise<void> {
+  await updateDoc(doc(firebase().db, "people", personId), { appRole });
+}
+
+export interface SessionChanges {
+  start: number;
+  /** Absent = still open. */
+  end?: number;
+  siteId: string;
+}
+
+/**
+ * Corrects a check-in/check-out. Only marks it `editedAt`: who did it and why go
+ * to the audit log via attempt(), because every owner can read sessions.
+ * `storedEndReason` is the session's current reason; a check-out the admin adds
+ * where there was none is recorded as "admin".
+ */
+export async function updateSession(id: string, changes: SessionChanges, storedEndReason?: SessionEndReason): Promise<void> {
+  const closed = changes.end != null;
+  const keepReason = storedEndReason && storedEndReason !== "timeout" ? storedEndReason : undefined;
+  await updateDoc(doc(firebase().db, "sessions", id), {
+    start: changes.start,
+    siteId: changes.siteId,
+    end: closed ? changes.end : deleteField(),
+    endReason: closed ? (keepReason ?? "admin") : deleteField(),
+    editedAt: Date.now(),
+  });
 }
 
 /** Reset links expire (about an hour) and work once, so an unaccepted invite needs a fresh one. */
@@ -188,16 +220,19 @@ export async function deletePhotos(photos: Pick<SitePhoto, "id">[]): Promise<Pho
  * app shows the crew as "Corrected by admin".
  */
 export async function updateInventoryEntry(id: string, changes: InventoryChanges): Promise<void> {
-  const { auth, db } = firebase();
   const note = changes.note?.trim();
-  await updateDoc(doc(db, "inventory", id), {
+  await updateDoc(doc(firebase().db, "inventory", id), {
     siteId: changes.siteId,
     name: changes.name.trim().replace(/\s+/g, " "),
     quantity: changes.quantity,
     unit: changes.unit.trim(),
     note: note ? note : deleteField(),
+    ...(changes.usedQuantity != null ? { usedQuantity: changes.usedQuantity } : {}),
+    // A changed total no longer matches its pieces, so the dialog leaves them out and they are dropped.
+    packCount: changes.packCount ?? deleteField(),
+    packSize: changes.packSize ?? deleteField(),
+    // Who did it (and why) goes to the superadmin-only audit trail via attempt(), not this doc.
     editedAt: Date.now(),
-    editedBy: auth.currentUser?.uid ?? "",
   });
 }
 
@@ -222,4 +257,27 @@ export async function addInventoryEntry(changes: InventoryChanges, personName: s
     receivedAt: Date.now(),
     createdAt: serverTimestamp(),
   });
+}
+
+/**
+ * One line in the superadmin-only audit trail. Never throws: a failed log must
+ * not undo or block the action it records. Called by attempt() in store.tsx.
+ */
+export async function logAdminAction(
+  action: string,
+  details: { targetType?: string; targetId?: string; note?: string },
+  actorName: string
+): Promise<void> {
+  const uid = firebase().auth.currentUser?.uid;
+  if (!uid) return;
+  const present = Object.fromEntries(
+    Object.entries({ ...details, note: details.note?.trim() || undefined }).filter(([, v]) => v != null && v !== "")
+  );
+  await addDoc(collection(firebase().db, "adminAudit"), {
+    actorId: uid,
+    actorName,
+    action,
+    ...present,
+    at: Date.now(),
+  }).catch(e => console.warn("[admin] audit log failed —", e));
 }

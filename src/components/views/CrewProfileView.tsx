@@ -8,6 +8,7 @@ import {
   Crosshair,
   ImageIcon,
   Mail,
+  Pencil,
   MailPlus,
   Phone,
   Timer,
@@ -29,21 +30,24 @@ import { EmptyState, Panel } from "@/components/domain/Panel";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
 import { PhotoThumb } from "@/components/domain/PhotoThumb";
 import { PresenceTimeline } from "@/components/domain/PresenceTimeline";
+import { SessionEditDialog } from "@/components/domain/SessionEditDialog";
 import { StatusChip } from "@/components/domain/StatusDot";
 import { CountUp, Stagger, StaggerItem } from "@/components/motion";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { formatClock, formatDate, formatWeekday, hourOfDay, timeAgo } from "@/lib/format";
+import { formatClock, formatDate, formatDay, formatHours, formatTime, formatWeekday, hourOfDay, roleLabel, timeAgo } from "@/lib/format";
 import { attendanceFor, lastNDays } from "@/lib/insights";
 import { HOUR } from "@/lib/time";
-import { attempt, useLiveStore } from "@/lib/store";
+import { attempt, useLiveStore, useNow } from "@/lib/store";
 import { useTarget } from "@/lib/useTarget";
 import { cn } from "@/lib/utils";
 
 export function CrewProfileView({ id }: { id: string }) {
-  const { crew, sites, sessions, photos, events, setCrewActive, resendInvite } = useLiveStore();
+  const { crew, sites, sessions, photos, events, setCrewActive, resendInvite, updateSession } = useLiveStore();
+  const now = useNow();
   const person = crew.find(c => c.id === id);
   const assign = useTarget();
   const [openPhoto, setOpenPhoto] = useState<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
 
   const data = useMemo(() => {
     if (!person) return null;
@@ -64,6 +68,7 @@ export function CrewProfileView({ id }: { id: string }) {
       photos: myPhotos,
       weekPhotos: myPhotos.filter(p => p.takenAt >= weekStart).length,
       events: events.filter(e => e.personId === person.id).slice(0, 12),
+      sessions: sessions.filter(s => s.personId === person.id),
     };
   }, [person, sessions, photos, events]);
 
@@ -105,7 +110,7 @@ export function CrewProfileView({ id }: { id: string }) {
                 <div className="flex flex-wrap items-center gap-2.5">
                   <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{person.name}</h1>
                   <StatusChip status={person.status} />
-                  {person.appRole === "owner" && <span className="rounded-full bg-accent px-2.5 py-0.5 text-xs font-bold text-primary">Admin</span>}
+                  {person.appRole !== "worker" && <span className="rounded-full bg-accent px-2.5 py-0.5 text-xs font-bold text-primary">{roleLabel(person.appRole)}</span>}
                 </div>
                 <div className="mt-1 text-muted-foreground">
                   {[person.jobTitle, person.team].filter(Boolean).join(" · ")}
@@ -129,7 +134,7 @@ export function CrewProfileView({ id }: { id: string }) {
                     className="rounded-xl"
                     onClick={async () => {
                       if (!person.email) return toast.error("No email on file for this person.");
-                      if (await attempt("Resending the invite", () => resendInvite(person.email)))
+                      if (await attempt("Resending the invite", () => resendInvite(person.email), { targetType: "person", targetId: person.id }))
                         toast.success("Invite re-sent", { description: `New set-password link sent to ${person.email}.` });
                     }}
                   >
@@ -144,7 +149,7 @@ export function CrewProfileView({ id }: { id: string }) {
                   size="lg"
                   className="rounded-xl"
                   onClick={async () => {
-                    if (!(await attempt(deactivated ? "Reactivating" : "Deactivating", () => setCrewActive(person.id, person.name, deactivated)))) return;
+                    if (!(await attempt(deactivated ? "Reactivating" : "Deactivating", () => setCrewActive(person.id, person.name, deactivated), { targetType: "person", targetId: person.id }))) return;
                     toast(deactivated ? `${person.name} reactivated` : `${person.name} deactivated`);
                   }}
                 >
@@ -271,6 +276,58 @@ export function CrewProfileView({ id }: { id: string }) {
         </StaggerItem>
 
         <StaggerItem>
+          <Panel title="Check-ins" description="Last 15 days, newest first. Edit to correct a wrong or missing check-in or check-out.">
+            {data.sessions.length ? (
+              <div className="max-h-[360px] overflow-auto scrollbar-thin">
+                <table className="w-full min-w-[620px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
+                      <th className="py-2 pr-3">Day</th>
+                      <th className="py-2 pr-3">Site</th>
+                      <th className="py-2 pr-3">In</th>
+                      <th className="py-2 pr-3">Out</th>
+                      <th className="py-2 pr-3 text-right">Time</th>
+                      <th className="w-24 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.sessions.map(s => (
+                      <tr key={s.id} className="border-b border-border/70 last:border-0">
+                        <td className="py-2 pr-3 font-semibold whitespace-nowrap">
+                          {formatDay(s.start)}
+                          {s.editedAt != null && (
+                            <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground uppercase">Corrected</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3">{sites.find(site => site.id === s.siteId)?.name ?? "—"}</td>
+                        <td className="py-2 pr-3 tabular-nums">{formatTime(s.start)}</td>
+                        <td className="py-2 pr-3 tabular-nums">
+                          {s.end == null ? (
+                            <span className="font-semibold text-success">On shift</span>
+                          ) : s.endReason === "timeout" ? (
+                            <span className="text-muted-foreground">~{formatTime(s.end)} · lost signal</span>
+                          ) : (
+                            formatTime(s.end)
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">{formatHours((s.end ?? now) - s.start)}</td>
+                        <td className="py-2 text-right">
+                          <Button variant="ghost" size="sm" className="rounded-lg" onClick={() => setEditingSessionId(s.id)}>
+                            <Pencil /> Edit
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No check-ins in the last 15 days.</p>
+            )}
+          </Panel>
+        </StaggerItem>
+
+        <StaggerItem>
           <Panel title={`Photos by ${person.name.split(" ")[0]}`} description={`${data.photos.length} geotagged captures`}>
             {data.photos.length ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
@@ -285,6 +342,24 @@ export function CrewProfileView({ id }: { id: string }) {
         </StaggerItem>
       </Stagger>
 
+      <SessionEditDialog
+        session={data.sessions.find(s => s.id === editingSessionId) ?? null}
+        sites={sites}
+        personName={person.name}
+        now={now}
+        onClose={() => setEditingSessionId(null)}
+        onSave={async (changes, note) => {
+          const session = data.sessions.find(s => s.id === editingSessionId);
+          if (!session) return false;
+          const saved = await attempt("Editing check-in/out", () => updateSession(session.id, changes, session.endReason), {
+            targetType: "session",
+            targetId: session.id,
+            note,
+          });
+          if (saved) toast.success("Check-in corrected");
+          return saved != null;
+        }}
+      />
       <AssignSitesSheet key={assign.key} personId={assign.id} open={assign.open} onOpenChange={assign.setOpen} />
       <DeletableLightbox photos={data.photos.slice(0, 12)} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
     </>

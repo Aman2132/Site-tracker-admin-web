@@ -27,7 +27,11 @@ export function DeletableLightbox({
 
   const confirm = async () => {
     setDeleting(true);
-    const outcome = await attempt("Deleting photos", () => deletePhotos(pending));
+    const outcome = await attempt("Deleting photos", () => deletePhotos(pending), {
+      targetType: "photo",
+      targetId: pending.length === 1 ? pending[0].id : undefined,
+      note: `${pending.length} photo(s)`,
+    });
     setDeleting(false);
     setPending([]);
     if (!outcome) return;

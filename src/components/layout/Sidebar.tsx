@@ -5,12 +5,13 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useIsSuperadmin } from "@/components/auth/AuthProvider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CountUp, SPRING } from "@/components/motion";
 import { useLiveStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-import { NAV_ITEMS, isActive } from "./nav";
+import { isActive, navItemsFor } from "./nav";
 
 export const SIDEBAR_WIDTH = { open: 264, closed: 76 };
 
@@ -41,9 +42,10 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
 /** Nav list, shared by the desktop rail and the mobile drawer. */
 export function NavList({ collapsed = false, onNavigate, layoutKey }: { collapsed?: boolean; onNavigate?: () => void; layoutKey: string }) {
   const pathname = usePathname();
+  const isSuperadmin = useIsSuperadmin();
   return (
     <nav className="flex flex-col gap-1">
-      {NAV_ITEMS.map(item => {
+      {navItemsFor(isSuperadmin).map(item => {
         const active = isActive(pathname, item.href);
         const link = (
           <Link

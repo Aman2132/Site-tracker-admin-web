@@ -112,7 +112,7 @@ export function SiteDetailView({ id }: { id: string }) {
                     <DropdownMenuContent align="start" className="w-44">
                       <DropdownMenuRadioGroup
                         value={site.status}
-                        onValueChange={v => attempt("Updating status", () => setSiteStatus(site.id, v as SiteStatus))}
+                        onValueChange={v => attempt("Updating status", () => setSiteStatus(site.id, v as SiteStatus), { targetType: "site", targetId: site.id, note: String(v) })}
                       >
                         {(["planning", "active", "paused", "completed"] as const).map(status => (
                           <DropdownMenuRadioItem key={status} value={status} className="capitalize">

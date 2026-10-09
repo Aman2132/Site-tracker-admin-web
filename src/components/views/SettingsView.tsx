@@ -9,6 +9,7 @@ import { Field, TextInput } from "@/components/domain/FormBits";
 import { PageHeader } from "@/components/domain/PageHeader";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
 import { Button } from "@/components/ui/button";
+import { roleLabel } from "@/lib/format";
 import { TZ_LABEL } from "@/lib/time";
 import { useMounted } from "@/lib/useMounted";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,7 @@ export function SettingsView() {
             <PersonAvatar person={{ name: admin.profile.name, color: admin.profile.color, status: "online" }} size="xl" />
             <div>
               <div className="text-xl font-semibold">{admin.profile.name}</div>
-              <div className="text-sm text-muted-foreground">{admin.profile.role} · Admin</div>
+              <div className="text-sm text-muted-foreground">{admin.profile.role} · {roleLabel(admin.profile.appRole)}</div>
             </div>
           </div>
           <div className="grid gap-5 py-6 sm:grid-cols-2">

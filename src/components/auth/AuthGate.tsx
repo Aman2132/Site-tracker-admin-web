@@ -1,14 +1,15 @@
 "use client";
 
-import { Loader2, LogIn } from "lucide-react";
+import { Loader2, LogIn, ShieldAlert } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 
 import { Field, TextInput } from "@/components/domain/FormBits";
+import { EmptyState } from "@/components/domain/Panel";
 import { BrandMark } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { HAS_FIREBASE_CONFIG } from "@/lib/firebase";
 
-import { useAuth } from "./AuthProvider";
+import { useAuth, useIsSuperadmin } from "./AuthProvider";
 
 function Centered({ children }: { children: ReactNode }) {
   return (
@@ -105,6 +106,20 @@ export function AuthGate({ children }: { children: ReactNode }) {
           Sign out
         </Button>
       </Centered>
+    );
+  }
+  return <>{children}</>;
+}
+
+/** Superadmin-only pages: everyone else gets a refusal (the database refuses them too). */
+export function SuperadminOnly({ children }: { children: ReactNode }) {
+  if (!useIsSuperadmin()) {
+    return (
+      <EmptyState
+        icon={<ShieldAlert className="size-6" />}
+        title="Superadmin only"
+        description="This page is only available to the superadmin account."
+      />
     );
   }
   return <>{children}</>;

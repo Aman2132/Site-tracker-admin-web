@@ -4,7 +4,7 @@
  * derived fields the dashboard shows (presence status, hours).
  */
 
-export type AppRole = "owner" | "worker";
+export type AppRole = "owner" | "worker" | "superadmin";
 
 /** Same vocabulary as the mobile app's ActivityKind. */
 export type ActivityKind = "vehicle" | "walk" | "still" | "stale";
@@ -74,6 +74,8 @@ export interface SitePhoto {
   task: string;
   /** Optional free-text description written by the crew. */
   note?: string;
+  /** The inventory entry this photo is proof for, if the crew linked one. */
+  inventoryId?: string;
   takenAt: number;
   lat: number;
   lng: number;
@@ -81,7 +83,8 @@ export interface SitePhoto {
   plusCode: string;
 }
 
-export type SessionEndReason = "signed-off" | "paused" | "timeout";
+/** "admin": an owner set the check-out by hand. "timeout": derived by settleSessions, never stored. */
+export type SessionEndReason = "signed-off" | "paused" | "admin" | "timeout";
 
 /** One continuous stretch of checked-in time. `end` is undefined while still open. */
 export interface PresenceSession {
@@ -91,6 +94,20 @@ export interface PresenceSession {
   start: number;
   end?: number;
   endReason?: SessionEndReason;
+  /** Set when an owner corrected it. Who and why live only in the superadmin audit log. */
+  editedAt?: number;
+}
+
+/** `adminAudit/{id}`: one admin action, readable by a superadmin only. */
+export interface AuditEntry {
+  id: string;
+  actorId: string;
+  actorName: string;
+  action: string;
+  targetType?: string;
+  targetId?: string;
+  note?: string;
+  at: number;
 }
 
 export type EventKind = "checkin" | "checkout" | "upload" | "battery" | "pause" | "resume" | "crew" | "site" | "other";
@@ -146,10 +163,27 @@ export interface InventoryEntry {
   unit: string;
   note?: string;
   receivedAt: number;
-  /** Set when an owner changed it from the dashboard. */
+  /** Arrived as equal pieces: how many, and how much `unit` each (5 × 5 m wire = 25 m). */
+  packCount?: number;
+  packSize?: number;
+  /** Running total the creator logged as used (sum of `usage`). */
+  usedQuantity: number;
+  /** Each time the creator logged usage, oldest first. */
+  usage: InventoryUsage[];
+  /** Set when an owner changed it from the dashboard. Who did it lives in the superadmin-only audit trail. */
   editedAt?: number;
-  editedBy?: string;
 }
 
-/** What an owner can set when adding or correcting an entry. */
-export type InventoryChanges = Pick<InventoryEntry, "siteId" | "name" | "quantity" | "unit" | "note">;
+export interface InventoryUsage {
+  quantity: number;
+  at: number;
+  note?: string;
+}
+
+/** What an owner can set when adding or correcting an entry. Admins may also correct `usedQuantity`. */
+export type InventoryChanges = Pick<
+  InventoryEntry,
+  "siteId" | "name" | "quantity" | "unit" | "note" | "packCount" | "packSize"
+> & {
+  usedQuantity?: number;
+};

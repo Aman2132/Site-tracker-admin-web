@@ -13,6 +13,7 @@ import { DAY, dayStart } from "./time";
 
 import type {
   ActivityEvent,
+  AuditEntry,
   CrewMember,
   InventoryEntry,
   PersonDoc,
@@ -27,6 +28,7 @@ const SESSION_DAYS = 15;
 /** The newest this many photos / events are loaded; older ones aren't shown. */
 const PHOTO_LIMIT = 300;
 const EVENT_LIMIT = 300;
+const AUDIT_LIMIT = 500;
 /** ponytail: newest 2000 inventory entries; page or aggregate server-side once a project logs more. */
 const INVENTORY_LIMIT = 2000;
 /** Statuses go stale as time passes with no new data, so they are re-derived this often. */
@@ -63,6 +65,8 @@ interface LiveStore {
   addInventoryEntry: typeof admin.addInventoryEntry;
   updateInventoryEntry: typeof admin.updateInventoryEntry;
   deleteInventoryEntry: typeof admin.deleteInventoryEntry;
+  setAppRole: typeof admin.setAppRole;
+  updateSession: typeof admin.updateSession;
 }
 
 const LiveStoreContext = createContext<LiveStore | null>(null);
@@ -143,6 +147,10 @@ export function LiveStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const crew = useMemo(() => deriveCrew(people ?? [], positions ?? {}, now), [people, positions, now]);
+  useEffect(() => {
+    const myUid = firebase().auth.currentUser?.uid;
+    currentActorName = people?.find(p => p.id === myUid)?.name ?? "";
+  }, [people]);
   const sessions = useMemo(() => settleSessions(rawSessions, positions ?? {}, now), [rawSessions, positions, now]);
 
   const value = useMemo<LiveStore>(
@@ -176,7 +184,25 @@ const ACTIONS = {
   addInventoryEntry: admin.addInventoryEntry,
   updateInventoryEntry: admin.updateInventoryEntry,
   deleteInventoryEntry: admin.deleteInventoryEntry,
+  setAppRole: admin.setAppRole,
+  updateSession: admin.updateSession,
 };
+
+/** Newest admin actions, live. Superadmin only: mount it nowhere an owner can reach (the read is denied). */
+export function useAdminAudit(): { entries: AuditEntry[] | null; error: string | null } {
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(
+    () =>
+      onSnapshot(
+        query(collection(firebase().db, "adminAudit"), orderBy("at", "desc"), limit(AUDIT_LIMIT)),
+        snap => setEntries(snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<AuditEntry, "id">) }))),
+        e => setError(e.message)
+      ),
+    []
+  );
+  return { entries, error };
+}
 
 export function useLiveStore(): LiveStore {
   const store = useContext(LiveStoreContext);
@@ -188,16 +214,37 @@ export function useNow(): number {
   return useLiveStore().now;
 }
 
-/** Runs an admin action and reports a failure as a toast. Resolves with `{ value }`, or null when it failed. */
-export async function attempt<T>(label: string, work: () => Promise<T>): Promise<{ value: T } | null> {
+/**
+ * Runs an admin action and reports a failure as a toast. Resolves with `{ value }`, or null when it failed.
+ * Every successful action is also written to the superadmin-only audit trail (adminAudit), so all
+ * admin edits are attributable without each action logging itself. Pass `audit` to say what was
+ * touched and to attach the admin's note.
+ */
+export async function attempt<T>(
+  label: string,
+  work: () => Promise<T>,
+  audit: AuditDetails = {}
+): Promise<{ value: T } | null> {
   try {
-    return { value: await work() };
+    const value = await work();
+    void admin.logAdminAction(label, audit, actorName());
+    return { value };
   } catch (e) {
     console.warn(`[admin] ${label} failed —`, e);
     toast.error(`${label} failed`, { description: e instanceof Error ? e.message : "Something went wrong." });
     return null;
   }
 }
+
+export interface AuditDetails {
+  targetType?: string;
+  targetId?: string;
+  note?: string;
+}
+
+/** The signed-in admin's profile name, kept current by LiveStoreProvider for the audit trail. */
+let currentActorName = "";
+const actorName = () => currentActorName;
 
 /** Convenience lookups. */
 export function useLookups() {

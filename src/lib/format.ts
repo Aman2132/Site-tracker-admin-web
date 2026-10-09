@@ -84,3 +84,7 @@ export function formatCoord(lat: number, lng: number): string {
 }
 
 export const percent = (v: number) => `${Math.round(v * 100)}%`;
+
+/** The dashboard calls owners "Admin". */
+export const roleLabel = (role: "owner" | "worker" | "superadmin") =>
+  role === "superadmin" ? "Superadmin" : role === "owner" ? "Admin" : "Worker";
