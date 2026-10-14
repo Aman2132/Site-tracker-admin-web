@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import { useIsSuperadmin } from "@/components/auth/AuthProvider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CountUp, SPRING } from "@/components/motion";
+import { isOnShift } from "@/lib/insights";
 import { useLiveStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -95,9 +96,9 @@ export function NavList({ collapsed = false, onNavigate, layoutKey }: { collapse
 }
 
 function LiveCrewCard({ collapsed }: { collapsed: boolean }) {
-  const { crew } = useLiveStore();
-  const online = crew.filter(c => c.status === "online").length;
-  const total = crew.filter(c => c.status !== "invited" && c.status !== "deactivated").length;
+  const { roster } = useLiveStore();
+  const online = roster.filter(isOnShift).length;
+  const total = roster.filter(c => c.status !== "invited" && c.status !== "deactivated").length;
 
   if (collapsed) {
     return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlarmClock, Building2, CalendarRange, Download, Timer, UserCheck, WifiOff } from "lucide-react";
+import { AlarmClock, Building2, CalendarRange, Download, Timer, TriangleAlert, UserCheck, WifiOff } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -22,17 +22,42 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDay, formatDayMonth, formatHours, formatTime, formatWeekday } from "@/lib/format";
-import { attendanceFor, lastNDays, type AttendanceCell } from "@/lib/insights";
+import { MIN_SHIFT_MS, attendanceFor, lastNDays, type AttendanceCell } from "@/lib/insights";
 import { HOUR, dayStart } from "@/lib/time";
 import { useLiveStore, useLookups, useNow } from "@/lib/store";
+import { defaultSiteAmong } from "@/lib/prefs";
 import { cn } from "@/lib/utils";
 
 /** A full shift; cells are shaded by how close they get to it. */
 const FULL_DAY = 9 * HOUR;
 
-function HeatCell({ cell, delay }: { cell: AttendanceCell; delay: number }) {
-  if (!cell.sessions.length) {
-    return <div className="flex h-12 items-center justify-center rounded-xl border border-dashed border-border text-[11px] font-semibold text-faint">Off</div>;
+/** A check-in with (next to) no time on it isn't a shift: it shows like a day off. */
+const hasShift = (cell: AttendanceCell) => cell.workedMs >= MIN_SHIFT_MS;
+
+/** Late / lost signal / too long, as icons inside the cell (shared by the grid and the phone list). */
+function CellFlags({ cell, className }: { cell: AttendanceCell; className?: string }) {
+  const timeout = cell.sessions.some(s => s.endReason === "timeout");
+  if (!cell.late && !timeout && !cell.long && !cell.open) return null;
+  return (
+    <span className={cn("flex items-center gap-0.5", className)}>
+      {cell.long && <TriangleAlert className="size-3.5 text-danger" aria-label="Over 12 hours" />}
+      {cell.late && <AlarmClock className="size-3.5 text-warning" aria-label="Late" />}
+      {timeout && <WifiOff className="size-3.5 text-chart-4" aria-label="Lost signal" />}
+      {cell.open && <span className="size-2 animate-pulse rounded-full bg-success ring-1 ring-card" aria-label="On shift now" />}
+    </span>
+  );
+}
+
+function HeatCell({ cell, delay, href }: { cell: AttendanceCell; delay: number; href: string }) {
+  if (!hasShift(cell)) {
+    return (
+      <div
+        className="flex h-12 items-center justify-center"
+        title={cell.sessions.length ? `${formatDay(cell.day)}: checked in, no time logged` : `${formatDay(cell.day)}: off`}
+      >
+        <span className="size-1.5 rounded-full bg-border" />
+      </div>
+    );
   }
   const strength = Math.min(1, cell.workedMs / FULL_DAY);
   const timeout = cell.sessions.some(s => s.endReason === "timeout");
@@ -45,7 +70,10 @@ function HeatCell({ cell, delay }: { cell: AttendanceCell; delay: number }) {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.35, delay }}
             whileHover={{ scale: 1.06, zIndex: 2 }}
-            className="relative flex h-12 cursor-default flex-col items-center justify-center rounded-xl text-xs font-bold"
+            className={cn(
+              "relative flex h-12 cursor-default flex-col items-center justify-center rounded-xl text-xs font-bold",
+              cell.long && "ring-2 ring-danger"
+            )}
             style={{
               backgroundColor: `color-mix(in oklab, var(--primary) ${Math.round(10 + strength * 70)}%, var(--card))`,
               color: strength > 0.55 ? "white" : "var(--foreground)",
@@ -54,11 +82,7 @@ function HeatCell({ cell, delay }: { cell: AttendanceCell; delay: number }) {
         }
       >
         {formatHours(cell.workedMs)}
-        <span className="absolute top-1.5 right-1.5 flex gap-0.5">
-          {cell.late && <span className="size-1.5 rounded-full bg-warning ring-1 ring-card" />}
-          {timeout && <span className="size-1.5 rounded-full bg-danger ring-1 ring-card" />}
-          {cell.open && <span className="size-1.5 animate-pulse rounded-full bg-success ring-1 ring-card" />}
-        </span>
+        <CellFlags cell={cell} className="mt-0.5 rounded-md bg-card/90 px-0.5" />
       </TooltipTrigger>
       <TooltipContent>
         <div className="font-semibold">{formatDay(cell.day)}</div>
@@ -70,18 +94,23 @@ function HeatCell({ cell, delay }: { cell: AttendanceCell; delay: number }) {
           {cell.late ? " · late" : ""}
           {timeout ? " · lost signal" : ""}
         </div>
+        {cell.long && (
+          <Link href={href} className="mt-1 block font-semibold text-danger underline">
+            Over 12 h, probably a missed check-out. Correct it
+          </Link>
+        )}
       </TooltipContent>
     </Tooltip>
   );
 }
 
 export function AttendanceView() {
-  const { crew, sessions, sites } = useLiveStore();
+  const { roster: crew, sessions, sites } = useLiveStore();
   const { siteById } = useLookups();
   const now = useNow();
   const [mode, setMode] = useState<"grid" | "timeline">("grid");
   const [span, setSpan] = useState<"7" | "14">("7");
-  const [site, setSite] = useState("all");
+  const [site, setSite] = useState(() => defaultSiteAmong(sites));
   const [timelineDay, setTimelineDay] = useState(() => dayStart(now));
 
   const days = useMemo(() => lastNDays(Number(span)), [span]);
@@ -91,18 +120,21 @@ export function AttendanceView() {
   );
   const scoped = useMemo(() => (site === "all" ? sessions : sessions.filter(s => s.siteId === site)), [sessions, site]);
 
+  // Most hours first, so the people who worked are on top.
   const rows = useMemo(
     () =>
-      people.map(p => {
-        const cells = attendanceFor(p.id, scoped, days);
-        return { person: p, cells, total: cells.reduce((s, c) => s + c.workedMs, 0) };
-      }),
+      people
+        .map(p => {
+          const cells = attendanceFor(p.id, scoped, days);
+          return { person: p, cells, total: cells.reduce((s, c) => s + c.workedMs, 0) };
+        })
+        .sort((a, b) => b.total - a.total || a.person.name.localeCompare(b.person.name)),
     [people, scoped, days]
   );
 
   const summary = useMemo(() => {
-    const all = rows.flatMap(r => r.cells).filter(c => c.sessions.length);
-    const todayCells = rows.map(r => r.cells[r.cells.length - 1]).filter(c => c.sessions.length);
+    const all = rows.flatMap(r => r.cells).filter(hasShift);
+    const todayCells = rows.map(r => r.cells[r.cells.length - 1]).filter(hasShift);
     return {
       avg: all.length ? all.reduce((s, c) => s + c.workedMs, 0) / all.length / HOUR : 0,
       late: all.filter(c => c.late).length,
@@ -136,10 +168,10 @@ export function AttendanceView() {
       />
 
       <div className="mb-5 grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="Present today" value={summary.presentToday} icon={UserCheck} tone="success" footnote={`of ${people.length} on the roster`} />
-        <StatCard label="Avg. hours / day" value={summary.avg} decimals={1} suffix="h" icon={Timer} tone="primary" footnote="on days worked" />
-        <StatCard label="Late arrivals" value={summary.late} icon={AlarmClock} tone="warning" footnote="after 9:15 am" />
-        <StatCard label="Signal drop-offs" value={summary.timeouts} icon={WifiOff} tone="violet" footnote="sessions ended by timeout" />
+        <StatCard label="Present today" value={summary.presentToday} icon={UserCheck} tone="success" footnote={`Today · of ${people.length} on the roster`} />
+        <StatCard label="Avg. hours / day" value={summary.avg} decimals={1} suffix="h" icon={Timer} tone="primary" footnote={`Last ${span} days · days worked`} />
+        <StatCard label="Late arrivals" value={summary.late} icon={AlarmClock} tone="warning" footnote={`Last ${span} days · after 9:15 am`} />
+        <StatCard label="Signal drop-offs" value={summary.timeouts} icon={WifiOff} tone="violet" footnote={`Last ${span} days · ended by timeout`} />
       </div>
 
       <div className="surface mb-5 flex flex-col gap-3 rounded-2xl p-3 md:flex-row md:items-center">
@@ -188,14 +220,56 @@ export function AttendanceView() {
             </span>
           }
           action={
-            <div className="hidden items-center gap-4 text-xs font-semibold text-muted-foreground sm:flex">
-              <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-warning" /> Late</span>
-              <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-danger" /> Lost signal</span>
+            <div className="hidden flex-wrap items-center gap-4 text-xs font-semibold text-muted-foreground md:flex">
+              <span className="flex items-center gap-1.5"><AlarmClock className="size-3.5 text-warning" /> Late</span>
+              <span className="flex items-center gap-1.5"><WifiOff className="size-3.5 text-chart-4" /> Lost signal</span>
+              <span className="flex items-center gap-1.5"><TriangleAlert className="size-3.5 text-danger" /> Over 12 h</span>
               <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-success" /> On shift now</span>
             </div>
           }
         >
-          <div className="overflow-x-auto scrollbar-thin">
+          {/* Phone: one day at a time, a row per person. */}
+          <div className="md:hidden">
+            <div className="-mx-1 mb-3 flex gap-1 overflow-x-auto px-1 pb-1 scrollbar-thin">
+              {days.map(d => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setTimelineDay(d)}
+                  className={cn(
+                    "flex h-12 w-11 shrink-0 flex-col items-center justify-center rounded-xl text-xs font-semibold",
+                    timelineDay === d ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  <span>{formatWeekday(d)}</span>
+                  <span className="text-sm">{formatDayMonth(d).split(" ")[0]}</span>
+                </button>
+              ))}
+            </div>
+            <ul className="divide-y divide-border">
+              {rows
+                .map(r => ({ person: r.person, cell: r.cells.find(c => c.day === timelineDay) ?? attendanceFor(r.person.id, scoped, [timelineDay])[0] }))
+                .sort((a, b) => b.cell.workedMs - a.cell.workedMs)
+                .map(({ person, cell }) => (
+                  <li key={person.id}>
+                    <Link href={`/crew/${person.id}`} className="flex items-center gap-3 py-2.5">
+                      <PersonAvatar person={person} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-bold">{person.name}</div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {hasShift(cell) ? `In ${formatTime(cell.firstIn!)}` : "Off"}
+                        </div>
+                      </div>
+                      <CellFlags cell={cell} />
+                      <span className={cn("w-16 text-right text-sm font-semibold tabular-nums", !hasShift(cell) && "text-faint")}>
+                        {hasShift(cell) ? formatHours(cell.workedMs) : "—"}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+            </ul>
+          </div>
+          <div className="hidden overflow-x-auto scrollbar-thin md:block">
             <div
               className="grid min-w-[760px] items-center gap-2"
               style={{ gridTemplateColumns: `minmax(200px, 1.4fr) repeat(${days.length}, minmax(52px, 1fr)) 80px` }}
@@ -219,7 +293,7 @@ export function AttendanceView() {
                     </div>
                   </Link>
                   {row.cells.map((cell, c) => (
-                    <HeatCell key={cell.day} cell={cell} delay={Math.min(r * 0.03 + c * 0.015, 0.8)} />
+                    <HeatCell key={cell.day} cell={cell} href={`/crew/${row.person.id}`} delay={Math.min(r * 0.03 + c * 0.015, 0.8)} />
                   ))}
                   <div className="text-right text-sm font-semibold tabular-nums">{formatHours(row.total)}</div>
                 </div>

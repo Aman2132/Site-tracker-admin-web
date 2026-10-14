@@ -46,7 +46,7 @@ export function AssignSitesSheet({
                 <div className="truncate font-bold">{person.name}</div>
                 <div className="text-xs text-muted-foreground">{person.jobTitle}</div>
               </div>
-              <StatusChip status={person.status} />
+              <StatusChip status={person.status} since={person.lastSeenAt} />
             </div>
           )}
         </SheetHeader>

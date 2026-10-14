@@ -26,6 +26,7 @@ import {
 import { formatDay } from "@/lib/format";
 import { DAY, dayStart } from "@/lib/time";
 import { attempt, useLiveStore, useLookups, useNow } from "@/lib/store";
+import { defaultSiteAmong } from "@/lib/prefs";
 import { cn } from "@/lib/utils";
 
 import type { SitePhoto } from "@/types/domain";
@@ -44,7 +45,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
   const { photos, sites, crew, deletePhotos } = useLiveStore();
   const { personById } = useLookups();
   const now = useNow();
-  const [site, setSite] = useState<string>(initialSite && sites.some(s => s.id === initialSite) ? initialSite : "all");
+  const [site, setSite] = useState<string>(() => (initialSite && sites.some(s => s.id === initialSite) ? initialSite : defaultSiteAmong(sites)));
   const [person, setPerson] = useState("all");
   const [range, setRange] = useState<Range>("7d");
   const [media, setMedia] = useState<Media>("all");
@@ -56,19 +57,20 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
   const [pendingDelete, setPendingDelete] = useState<SitePhoto[]>([]);
   const [deleting, setDeleting] = useState(false);
 
-  const filtered = useMemo(() => {
+  /** Every filter but the site: the site chips count from this, so each chip shows what clicking it would show. */
+  const beforeSite = useMemo(() => {
     const today = dayStart(now);
     const from = range === "today" ? today : range === "7d" ? today - 6 * DAY : 0;
     const q = query.trim().toLowerCase();
     return photos.filter(
       p =>
         p.takenAt >= from &&
-        (site === "all" || p.siteId === site) &&
         (person === "all" || p.personId === person) &&
         (media === "all" || p.mediaType === media) &&
         (!q || p.task.toLowerCase().includes(q) || p.note?.toLowerCase().includes(q) || personById.get(p.personId)?.name.toLowerCase().includes(q))
     );
-  }, [photos, site, person, range, media, query, personById, now]);
+  }, [photos, person, range, media, query, personById, now]);
+  const filtered = useMemo(() => beforeSite.filter(p => site === "all" || p.siteId === site), [beforeSite, site]);
 
   const groups = useMemo(() => {
     const map = new Map<number, SitePhoto[]>();
@@ -167,7 +169,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
       <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-thin">
         {[{ id: "all", name: "All sites", color: "var(--primary)" }, ...sites].map(s => {
           const active = site === s.id;
-          const count = s.id === "all" ? photos.length : photos.filter(p => p.siteId === s.id).length;
+          const count = s.id === "all" ? beforeSite.length : beforeSite.filter(p => p.siteId === s.id).length;
           return (
             <motion.button
               key={s.id}
@@ -292,7 +294,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
                   <Check className="size-3.5" /> Day report
                 </button>
               </div>
-              <div className="columns-2 gap-3 sm:columns-3 lg:columns-4 2xl:columns-5 [&>*]:mb-3">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
                 {items.map((p, i) => (
                   <PhotoThumb
                     key={p.id}
@@ -302,7 +304,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
                     selecting={selecting}
                     selected={selected.has(p.id)}
                     onToggle={toggle}
-                    className={p.height > p.width ? "aspect-[3/4]" : "aspect-[4/3]"}
+                    className="aspect-[4/3]"
                   />
                 ))}
               </div>

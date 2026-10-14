@@ -4,7 +4,7 @@ import { Bell, BatteryLow, Clock3, LogOut, Menu, Search, UserRound, MailQuestion
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,8 +19,11 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useAdmin, useAuth } from "@/components/auth/AuthProvider";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
-import { needsAttention } from "@/lib/insights";
+import { LOW_BATTERY, isOnShift, needsAttention } from "@/lib/insights";
+import { usePrefs } from "@/lib/prefs";
 import { useLiveStore } from "@/lib/store";
+
+import type { CrewMember } from "@/types/domain";
 
 import { CommandPalette } from "./CommandPalette";
 import { NAV_ITEMS, isActive } from "./nav";
@@ -29,9 +32,42 @@ import { ThemeToggle } from "./ThemeToggle";
 
 const REASON_ICON = { idle: Clock3, battery: BatteryLow, invited: MailQuestion, offline: Clock3 };
 
+/**
+ * Browser notifications turned on in Settings: someone on shift loses signal, or drops to low battery.
+ * Fires only on a change while this tab is open (there is no server-side sender), never for the state
+ * found when the page loads.
+ */
+function useBrowserAlerts(crew: CrewMember[]) {
+  const [prefs] = usePrefs();
+  const seen = useRef<Map<string, { lost: boolean; low: boolean }> | null>(null);
+  useEffect(() => {
+    const next = new Map(
+      crew.map(c => [
+        c.id,
+        {
+          lost: isOnShift(c) && c.status === "idle" && !c.paused,
+          low: isOnShift(c) && c.battery != null && c.battery <= LOW_BATTERY,
+        },
+      ])
+    );
+    const before = seen.current;
+    seen.current = next;
+    if (!before || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    for (const c of crew) {
+      const was = before.get(c.id);
+      const is = next.get(c.id)!;
+      if (prefs.notifySignalLost && is.lost && !was?.lost)
+        new Notification(`${c.name} lost signal`, { body: "No location update for 15 minutes while on shift." });
+      if (prefs.notifyLowBattery && is.low && !was?.low)
+        new Notification(`${c.name}'s battery is low`, { body: `Battery at ${Math.round((c.battery ?? 0) * 100)}% while on shift.` });
+    }
+  }, [crew, prefs.notifySignalLost, prefs.notifyLowBattery]);
+}
+
 function NotificationsMenu() {
-  const { crew } = useLiveStore();
+  const { roster: crew } = useLiveStore();
   const items = needsAttention(crew);
+  useBrowserAlerts(crew);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

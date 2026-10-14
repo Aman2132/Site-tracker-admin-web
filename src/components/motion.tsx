@@ -3,6 +3,8 @@
 import { animate, motion, useInView, useMotionValue, useReducedMotion, useTransform, type HTMLMotionProps } from "motion/react";
 import { useEffect, useRef } from "react";
 
+import { cn } from "@/lib/utils";
+
 /** Shared easing + timing, so every entrance in the app moves the same way. */
 export const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 export const SPRING = { type: "spring", stiffness: 380, damping: 32 } as const;
@@ -26,9 +28,10 @@ export function Stagger({ children, ...props }: HTMLMotionProps<"div">) {
   );
 }
 
-export function StaggerItem({ children, ...props }: HTMLMotionProps<"div">) {
+/** Usually a grid cell: min-w-0 lets wide content (tables) scroll inside it instead of widening the page. */
+export function StaggerItem({ children, className, ...props }: HTMLMotionProps<"div">) {
   return (
-    <motion.div variants={item} {...props}>
+    <motion.div variants={item} className={cn("min-w-0", className)} {...props}>
       {children}
     </motion.div>
   );

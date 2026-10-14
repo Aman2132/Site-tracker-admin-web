@@ -25,8 +25,8 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatDate, formatHours, formatWeekday, timeAgo } from "@/lib/format";
-import { hoursOnDay, lastNDays } from "@/lib/insights";
+import { formatDate, formatHours, formatWeekday, plural, timeAgo } from "@/lib/format";
+import { hoursOnDay, isOnShift, lastNDays } from "@/lib/insights";
 import { DAY, HOUR, dayStart } from "@/lib/time";
 import { attempt, useLiveStore, useNow } from "@/lib/store";
 import { useTarget } from "@/lib/useTarget";
@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
 import type { SiteStatus } from "@/types/domain";
 
 export function SiteDetailView({ id }: { id: string }) {
-  const { sites, crew, sessions, photos, events, setSiteStatus } = useLiveStore();
+  const { sites, roster: crew, sessions, photos, events, setSiteStatus } = useLiveStore();
   const now = useNow();
   const { openAddCrew } = useDialogs();
   const assign = useTarget();
@@ -80,7 +80,7 @@ export function SiteDetailView({ id }: { id: string }) {
   }
 
   const assigned = crew.filter(c => c.siteIds.includes(site.id) && c.status !== "deactivated");
-  const here = crew.filter(c => c.currentSiteId === site.id && (c.status === "online" || c.status === "idle"));
+  const here = crew.filter(c => isOnShift(c) && c.currentSiteId === site.id);
   const gallery = data.photos.slice(0, 8);
 
   return (
@@ -196,7 +196,7 @@ export function SiteDetailView({ id }: { id: string }) {
           </Panel>
           <Panel
             title="Assigned crew"
-            description={`${assigned.length} people`}
+            description={plural(assigned.length, "person", "people")}
             action={<Button variant="ghost" size="sm" className="rounded-lg" onClick={() => assign.show(site.id)}>Manage</Button>}
           >
             <div className="overflow-x-auto scrollbar-thin">
@@ -213,9 +213,13 @@ export function SiteDetailView({ id }: { id: string }) {
                           </div>
                         </Link>
                       </td>
-                      <td className="px-3 py-2.5"><StatusChip status={p.status} /></td>
-                      <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
-                        {data.todayHoursBy(p.id) ? formatHours(data.todayHoursBy(p.id)) : <span className="text-faint">—</span>}
+                      <td className="px-3 py-2.5"><StatusChip status={p.status} since={p.lastSeenAt} /></td>
+                      <td className="px-3 py-2.5 text-right text-xs whitespace-nowrap text-muted-foreground">
+                        {data.todayHoursBy(p.id) > 0 && (
+                          <>
+                            <b className="text-sm text-foreground tabular-nums">{formatHours(data.todayHoursBy(p.id))}</b> today
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}

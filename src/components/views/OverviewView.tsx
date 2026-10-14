@@ -20,8 +20,8 @@ import { StatCard } from "@/components/domain/StatCard";
 import { useDialogs } from "@/components/layout/DialogsProvider";
 import { CountUp, Stagger, StaggerItem } from "@/components/motion";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { formatHours, hourOfDay } from "@/lib/format";
-import { attendanceFor, dailyStats, lastNDays, needsAttention, presenceCounts } from "@/lib/insights";
+import { formatHours, hourOfDay, plural } from "@/lib/format";
+import { attendanceFor, dailyStats, hoursOnDay, isOnShift, lastNDays, needsAttention, presenceCounts } from "@/lib/insights";
 import { DAY, dayStart } from "@/lib/time";
 import { useLiveStore, useNow } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -40,7 +40,8 @@ function greeting(now: number) {
 }
 
 export function OverviewView() {
-  const { crew, sites, sessions, photos, events } = useLiveStore();
+  // Admin accounts aren't crew: every headcount on this page is the working roster.
+  const { roster: crew, sites, sessions, photos, events } = useLiveStore();
   const { openAddCrew, openCreateSite } = useDialogs();
   const now = useNow();
   const admin = useAdmin();
@@ -50,10 +51,9 @@ export function OverviewView() {
   const stats = useMemo(() => {
     const days = dailyStats(sessions, photos, 14);
     const today = days[days.length - 1];
-    const thisWeek = days.slice(7);
-    const lastWeek = days.slice(0, 7);
-    const sum = (xs: typeof days, k: "hours" | "photos") => xs.reduce((s, d) => s + d[k], 0);
-    const change = (a: number, b: number) => (b === 0 ? 0 : (a - b) / b);
+    // A "today" tile compares with the same weekday last week, so its badge is about the number above it.
+    const sameDayLastWeek = days[days.length - 8];
+    const change = (a: number, b: number) => (b === 0 ? undefined : (a - b) / b);
 
     const todayStart = dayStart(now);
     const workers = crew.filter(c => c.status !== "invited" && c.status !== "deactivated");
@@ -63,8 +63,8 @@ export function OverviewView() {
     return {
       days,
       today,
-      hoursDelta: change(sum(thisWeek, "hours"), sum(lastWeek, "hours")),
-      photosDelta: change(sum(thisWeek, "photos"), sum(lastWeek, "photos")),
+      hoursDelta: change(today.hours, sameDayLastWeek.hours),
+      photosDelta: change(today.photos, sameDayLastWeek.photos),
       onTime,
       arrivedToday: todayCells.length,
     };
@@ -72,7 +72,9 @@ export function OverviewView() {
 
   const counts = presenceCounts(crew);
   const attention = needsAttention(crew);
-  const online = crew.filter(c => c.status === "online");
+  const onShift = crew.filter(isOnShift);
+  const onShiftAt = (siteId: string) => onShift.filter(c => c.currentSiteId === siteId);
+  const sitesWithCrew = sites.filter(s => onShiftAt(s.id).length > 0).length;
   const chartDays = range === "7" ? stats.days.slice(7) : stats.days;
   const recentPhotos = photos.slice(0, 6);
   const weekStart = lastNDays(7)[0];
@@ -96,7 +98,7 @@ export function OverviewView() {
             Your sites, <span className="text-gradient">live</span>
           </>
         }
-        description={`${counts.online} crew are on shift across ${sites.filter(s => s.status === "active").length} active sites. Here's what's happening right now.`}
+        description={`${plural(onShift.length, "person", "people")} on shift across ${plural(sitesWithCrew, "site")}. Here's what's happening right now.`}
         actions={
           <>
             <Button variant="outline" size="lg" className="rounded-xl bg-card" onClick={() => openAddCrew()}>
@@ -123,24 +125,26 @@ export function OverviewView() {
               <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-4">
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <CountUp value={counts.online} className="text-5xl leading-none font-semibold tracking-tight" />
-                    <span className="text-lg text-muted-foreground">online</span>
+                    <CountUp value={onShift.length} className="text-5xl leading-none font-semibold tracking-tight" />
+                    <span className="text-lg text-muted-foreground">on shift</span>
                   </div>
                   <div className="mt-2 text-sm text-muted-foreground">
                     of {crew.length - counts.deactivated} people on the roster
                   </div>
                 </div>
                 <div className="ml-auto">
-                  <AvatarStack people={online} max={6} size="md" />
+                  <AvatarStack people={onShift} max={6} size="md" />
                 </div>
               </div>
               <PresenceBar counts={counts} className="mt-6" />
 
-              <div className="mt-auto grid gap-2.5 pt-7 sm:grid-cols-2 xl:grid-cols-3">
+              {/* Per-site breakdown: on shift there now, out of everyone assigned there. */}
+              <div className="mt-6 grid gap-2.5">
                 {sites
-                  .filter(s => s.status === "active" || crew.some(c => c.currentSiteId === s.id))
+                  .filter(s => s.status !== "completed")
                   .map((s, i) => {
-                    const hereCount = crew.filter(c => c.currentSiteId === s.id && (c.status === "online" || c.status === "idle")).length;
+                    const hereCount = onShiftAt(s.id).length;
+                    const assignedCount = crew.filter(c => c.siteIds.includes(s.id) && c.status !== "deactivated").length;
                     return (
                       <motion.div
                         key={s.id}
@@ -153,8 +157,18 @@ export function OverviewView() {
                           className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-muted"
                         >
                           <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
-                          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{s.name}</span>
-                          <span className="text-lg font-semibold">{hereCount}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold">{s.name}</span>
+                            <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-muted">
+                              <span
+                                className="block h-full rounded-full"
+                                style={{ width: `${(hereCount / Math.max(assignedCount, 1)) * 100}%`, backgroundColor: s.color }}
+                              />
+                            </span>
+                          </span>
+                          <span className="text-sm whitespace-nowrap text-muted-foreground">
+                            <b className="text-lg text-foreground">{hereCount}</b> / {assignedCount}
+                          </span>
                         </Link>
                       </motion.div>
                     );
@@ -172,6 +186,7 @@ export function OverviewView() {
               icon={Timer}
               tone="primary"
               delta={stats.hoursDelta}
+              deltaLabel="vs same day last week"
               trend={stats.days.slice(7).map(d => d.hours)}
             />
             <StatCard
@@ -180,6 +195,7 @@ export function OverviewView() {
               icon={ImageIcon}
               tone="violet"
               delta={stats.photosDelta}
+              deltaLabel="vs same day last week"
               trend={stats.days.slice(7).map(d => d.photos)}
             />
             <StatCard
@@ -220,10 +236,10 @@ export function OverviewView() {
           >
             <div className="mb-3 flex gap-5 text-xs font-semibold text-muted-foreground">
               <span className="flex items-center gap-2">
-                <span className="h-0.5 w-4 rounded-full bg-chart-1" /> Hours worked
+                <span className="size-2.5 rounded-sm bg-chart-1" /> Hours worked (left axis)
               </span>
               <span className="flex items-center gap-2">
-                <span className="h-0.5 w-4 rounded-full border-t-2 border-dashed border-chart-2" /> Crew on shift
+                <span className="h-0.5 w-4 rounded-full bg-chart-2" /> Crew on shift (right axis)
               </span>
             </div>
             <AttendanceTrend key={range} data={chartDays} />
@@ -231,7 +247,7 @@ export function OverviewView() {
 
           <Panel
             title="Needs attention"
-            description={`${attention.length} things to look at`}
+            description={`${plural(attention.length, "thing")} to look at`}
             action={
               <Link href="/crew" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "rounded-lg")}>
                 Crew <ArrowRight />
@@ -281,11 +297,9 @@ export function OverviewView() {
           >
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               {sites.map((site, i) => {
-                const here = crew.filter(c => c.currentSiteId === site.id && (c.status === "online" || c.status === "idle"));
+                const here = onShiftAt(site.id);
                 const assigned = crew.filter(c => c.siteIds.includes(site.id) && c.status !== "deactivated").length;
-                const hoursToday = sessions
-                  .filter(s => s.siteId === site.id && s.start >= dayStart(now))
-                  .reduce((sum, s) => sum + ((s.end ?? now) - s.start), 0);
+                const hoursToday = hoursOnDay(sessions.filter(s => s.siteId === site.id), dayStart(now));
                 return (
                   <motion.div key={site.id} whileHover={{ y: -3 }} transition={{ type: "spring", stiffness: 400, damping: 26 }}>
                     <Link

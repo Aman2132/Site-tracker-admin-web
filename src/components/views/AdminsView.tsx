@@ -86,7 +86,7 @@ function Admins() {
                     </td>
                     <td className="px-3 py-3 font-semibold">{roleLabel(p.appRole)}</td>
                     <td className="px-3 py-3">
-                      <StatusChip status={p.status} />
+                      <StatusChip status={p.status} since={p.lastSeenAt} />
                     </td>
                     <td className="px-5 py-3 text-right">
                       <Button

@@ -75,7 +75,7 @@ export function StatCard({
               {Math.round(delta * 100)}%
             </span>
           )}
-          <span className="whitespace-nowrap text-muted-foreground">{footnote ?? deltaLabel}</span>
+          <span className="text-muted-foreground">{footnote ?? (delta != null ? deltaLabel : "no comparison yet")}</span>
         </div>
         {trend && <Sparkline data={trend} color={TONES[tone].line} className="h-9 w-20 shrink-0" />}
       </div>

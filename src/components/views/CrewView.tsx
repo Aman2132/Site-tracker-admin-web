@@ -10,6 +10,7 @@ import {
   MailPlus,
   MoreHorizontal,
   Search,
+  ShieldCheck,
   UserCheck,
   UserPlus,
   UserX,
@@ -47,7 +48,9 @@ import { formatHours, roleLabel, timeAgo } from "@/lib/format";
 import { hoursOnDay } from "@/lib/insights";
 import { dayStart } from "@/lib/time";
 import { attempt, useLiveStore, useLookups, useNow } from "@/lib/store";
+import { defaultSiteAmong } from "@/lib/prefs";
 import { useTarget } from "@/lib/useTarget";
+import { cn } from "@/lib/utils";
 
 import type { CrewMember, PresenceStatus } from "@/types/domain";
 
@@ -110,7 +113,7 @@ function CrewActions({ person, onAssign }: { person: CrewMember; onAssign: () =>
 
 export function CrewView() {
   const router = useRouter();
-  const { crew, sessions, sites } = useLiveStore();
+  const { crew: everyone, roster, sessions, sites } = useLiveStore();
   const { siteById } = useLookups();
   const { openAddCrew } = useDialogs();
   const assign = useTarget();
@@ -118,9 +121,12 @@ export function CrewView() {
 
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-  const [siteFilter, setSiteFilter] = useState("all");
+  const [siteFilter, setSiteFilter] = useState(() => defaultSiteAmong(sites));
   const [sort, setSort] = useState<SortKey>("lastSeen");
   const [view, setView] = useState<"table" | "cards">("table");
+  /** Admin accounts aren't crew, so they're hidden unless asked for. */
+  const [showAdmins, setShowAdmins] = useState(false);
+  const crew = showAdmins ? everyone : roster;
 
   const hoursToday = useMemo(() => {
     const today = dayStart(now);
@@ -184,10 +190,11 @@ export function CrewView() {
       />
 
       <div className="surface mb-5 flex flex-col gap-3 rounded-2xl p-3 lg:flex-row lg:items-center">
-        <div className="overflow-x-auto scrollbar-thin">
+        <div>
           <SegmentedControl
             value={filter}
             onChange={setFilter}
+            className="flex-wrap"
             options={[
               { value: "all", label: "All", count: counts.all },
               { value: "online", label: "Online", count: counts.online },
@@ -234,6 +241,15 @@ export function CrewView() {
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            variant="outline"
+            size="lg"
+            className={cn("h-10 rounded-xl", showAdmins && "border-primary text-primary")}
+            aria-pressed={showAdmins}
+            onClick={() => setShowAdmins(v => !v)}
+          >
+            <ShieldCheck /> {showAdmins ? "Hide admins" : "Show admins"}
+          </Button>
           <SegmentedControl
             value={view}
             onChange={setView}
@@ -257,7 +273,40 @@ export function CrewView() {
           }
         />
       ) : view === "table" ? (
-        <div className="surface overflow-hidden rounded-2xl">
+        <>
+        {/* Under 640 px a table can't fit; each person becomes a compact card. */}
+        <ul className="surface divide-y divide-border overflow-hidden rounded-2xl sm:hidden">
+          {rows.map(p => {
+            const firstSite = p.currentSiteId ?? p.siteIds[0];
+            const s = firstSite ? siteById.get(firstSite) : undefined;
+            return (
+              <li key={p.id}>
+                <Link href={`/crew/${p.id}`} className="flex items-center gap-3 p-3.5 active:bg-muted">
+                  <PersonAvatar person={p} size="md" showStatus={p.status === "online" || p.status === "idle"} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate font-bold">{p.name}</span>
+                      <StatusChip status={p.status} since={p.lastSeenAt} />
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      {s ? (
+                        <span className="inline-flex min-w-0 items-center gap-1">
+                          <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                          <span className="truncate">{s.name}</span>
+                        </span>
+                      ) : (
+                        <span>Unassigned</span>
+                      )}
+                      <span>·</span>
+                      <span className="shrink-0">{p.status === "invited" ? "Not signed in yet" : p.lastSeenAt ? `Seen ${timeAgo(p.lastSeenAt)}` : "Never seen"}</span>
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="surface hidden overflow-hidden rounded-2xl sm:block">
           <div className="overflow-x-auto scrollbar-thin">
             <table className="w-full min-w-[920px] text-sm">
               <thead>
@@ -297,7 +346,7 @@ export function CrewView() {
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <StatusChip status={p.status} />
+                        <StatusChip status={p.status} since={p.lastSeenAt} />
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex max-w-56 flex-wrap gap-1">
@@ -332,6 +381,7 @@ export function CrewView() {
             </table>
           </div>
         </div>
+        </>
       ) : (
         <motion.div layout className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           <AnimatePresence initial={false}>
@@ -348,7 +398,7 @@ export function CrewView() {
                 <Link href={`/crew/${p.id}`} className="surface group block rounded-2xl p-5 transition-shadow hover:shadow-lift">
                   <div className="flex items-start justify-between">
                     <PersonAvatar person={p} size="lg" showStatus={p.status === "online" || p.status === "idle"} />
-                    <StatusChip status={p.status} />
+                    <StatusChip status={p.status} since={p.lastSeenAt} />
                   </div>
                   <div className="mt-4 truncate text-base font-semibold group-hover:text-primary">{p.name}</div>
                   <div className="text-sm text-muted-foreground">

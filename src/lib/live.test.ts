@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { attendanceFor, collapseRepeats, hoursOnDay, overlappingSessionIds } from "./insights.ts";
 import { deriveCrew, settleSessions, toEvent, toPhoto } from "./live.ts";
 import { filesOf, storagePathFromUrl } from "./photoFiles.ts";
 import { DAY, HOUR, MINUTE, TZ_OFFSET, dayStart, fromLocalInput, sessionTimesProblem, toLocalInput } from "./time.ts";
@@ -177,4 +178,39 @@ test("inventory usage maps from the doc and totals add received, used and left",
   assert.deepEqual([t.quantity, t.used, t.left], [50, 15, 35]);
   // Over-logged usage never shows negative stock.
   assert.equal(totalsByItem([toInventory("w", { name: "Sand", quantity: 1, unit: "t", usedQuantity: 3 })])[0].left, 0);
+});
+
+test("a phone silent for more than 12 h is offline and off site, even if its last write named a site", () => {
+  const out = deriveCrew([person], { p: { siteId: "s", lastFixAt: NOW - 2 * DAY } }, NOW)[0];
+  assert.equal(out.status, "offline");
+  assert.equal(out.currentSiteId, undefined);
+  assert.equal(deriveCrew([person], { p: { siteId: "s", lastFixAt: NOW - 3 * HOUR } }, NOW)[0].status, "idle");
+});
+
+test("GPS accuracy is whole metres", () => {
+  assert.equal(toPhoto("x", { accuracy: 20.007999420166016 }).accuracy, 20);
+  assert.equal(deriveCrew([person], { p: { accuracy: 5.6, lastFixAt: NOW } }, NOW)[0].accuracy, 6);
+});
+
+test("overlapping sessions of one person count once and are flagged; different people still add up", () => {
+  const s = (id: string, personId: string, start: number, end: number) => ({ id, personId, siteId: "x", start, end });
+  const day = dayStart(NOW);
+  const twin = [s("a", "p", day + HOUR, day + 3 * HOUR), s("b", "p", day + 2 * HOUR, day + 4 * HOUR)];
+  assert.equal(hoursOnDay(twin, day), 3 * HOUR);
+  assert.deepEqual([...overlappingSessionIds(twin)].sort(), ["a", "b"]);
+  const two = [s("a", "p", day + HOUR, day + 3 * HOUR), s("c", "q", day + HOUR, day + 3 * HOUR)];
+  assert.equal(hoursOnDay(two, day), 4 * HOUR);
+  assert.equal(overlappingSessionIds(two).size, 0);
+});
+
+test("a day over 12 h is flagged as a long shift", () => {
+  const day = dayStart(NOW);
+  const [cell] = attendanceFor("p", [{ id: "a", personId: "p", siteId: "x", start: day, end: day + 13 * HOUR }], [day]);
+  assert.equal(cell.long, true);
+});
+
+test("back-to-back repeats fold into one event with a count", () => {
+  const e = (id: string, at: number, text: string) => ({ id, at, kind: "pause" as const, personId: "p", text, severity: "info" as const });
+  const out = collapseRepeats([e("1", NOW, "paused"), e("2", NOW - MINUTE, "paused"), e("3", NOW - 2 * MINUTE, "paused"), e("4", NOW - 3 * MINUTE, "resumed")]);
+  assert.deepEqual(out.map(x => [x.id, x.count]), [["1", 3], ["4", 1]]);
 });

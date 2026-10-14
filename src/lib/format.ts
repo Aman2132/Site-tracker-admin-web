@@ -1,4 +1,4 @@
-import { DAY, HOUR, TZ_OFFSET, MINUTE } from "@/lib/time";
+import { DAY, HOUR, TZ_OFFSET, MINUTE } from "./time.ts";
 
 /**
  * Dates render in Nepal time, computed by hand rather than through Intl so the
@@ -84,6 +84,9 @@ export function formatCoord(lat: number, lng: number): string {
 }
 
 export const percent = (v: number) => `${Math.round(v * 100)}%`;
+
+/** plural(1, "person", "people") → "1 person"; plural(3, "event") → "3 events". */
+export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** The dashboard calls owners "Admin". */
 export const roleLabel = (role: "owner" | "worker" | "superadmin") =>

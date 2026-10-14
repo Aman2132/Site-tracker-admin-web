@@ -28,7 +28,7 @@ const SESSION_DAYS = 15;
 /** The newest this many photos / events are loaded; older ones aren't shown. */
 const PHOTO_LIMIT = 300;
 const EVENT_LIMIT = 300;
-const AUDIT_LIMIT = 500;
+export const AUDIT_LIMIT = 500;
 /** ponytail: newest 2000 inventory entries; page or aggregate server-side once a project logs more. */
 const INVENTORY_LIMIT = 2000;
 /** Statuses go stale as time passes with no new data, so they are re-derived this often. */
@@ -49,7 +49,10 @@ interface LiveStore {
   /** Set when a listener fails (for instance rules not deployed), so the UI can say so. */
   error: string | null;
   sites: Site[];
+  /** Everyone with a profile, admins included (for names, the Admins page, lookups). */
   crew: CrewMember[];
+  /** The working crew: `crew` minus admin accounts. Every headcount and "on the roster" number uses this. */
+  roster: CrewMember[];
   events: ActivityEvent[];
   photos: SitePhoto[];
   sessions: PresenceSession[];
@@ -147,6 +150,7 @@ export function LiveStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const crew = useMemo(() => deriveCrew(people ?? [], positions ?? {}, now), [people, positions, now]);
+  const roster = useMemo(() => crew.filter(c => c.appRole === "worker"), [crew]);
   useEffect(() => {
     const myUid = firebase().auth.currentUser?.uid;
     currentActorName = people?.find(p => p.id === myUid)?.name ?? "";
@@ -160,13 +164,14 @@ export function LiveStoreProvider({ children }: { children: ReactNode }) {
       error,
       sites: sites ?? [],
       crew,
+      roster,
       events,
       photos,
       sessions,
       inventory,
       ...ACTIONS,
     }),
-    [people, positions, sites, now, error, crew, events, photos, sessions, inventory]
+    [people, positions, sites, now, error, crew, roster, events, photos, sessions, inventory]
   );
 
   return <LiveStoreContext.Provider value={value}>{children}</LiveStoreContext.Provider>;
