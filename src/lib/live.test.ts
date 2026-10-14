@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { attendanceFor, collapseRepeats, hoursOnDay, overlappingSessionIds } from "./insights.ts";
 import { deriveCrew, settleSessions, toEvent, toPhoto } from "./live.ts";
-import { HOUR, MINUTE } from "./time.ts";
+import { filesOf, storagePathFromUrl } from "./photoFiles.ts";
+import { DAY, HOUR, MINUTE, TZ_OFFSET, dayStart, fromLocalInput, sessionTimesProblem, toLocalInput } from "./time.ts";
 
 const NOW = Date.UTC(2026, 9, 5, 10, 0);
 const person = { id: "p", name: "Pooja", role: "Helper", color: "#a142f4", appRole: "worker" as const };
@@ -61,6 +63,12 @@ test("old photos without site, size or preview still map", () => {
   assert.equal(photo.siteId, "");
   assert.equal(photo.thumbUrl, "https://a/b.jpg");
   assert.deepEqual([photo.width, photo.height], [1600, 1200]);
+  assert.equal(photo.note, undefined);
+});
+
+test("photo note is kept when present, dropped when blank", () => {
+  assert.equal(toPhoto("x", { note: "  Cracked slab  " }).note, "Cracked slab");
+  assert.equal(toPhoto("x", { note: "   " }).note, undefined);
 });
 
 test("events use the recorded type, else guess from legacy text", () => {
@@ -68,4 +76,141 @@ test("events use the recorded type, else guess from legacy text", () => {
   assert.equal(toEvent("b", { text: "Pooja paused sharing", kind: "warn", at: 1 }, NOW).kind, "pause");
   assert.equal(toEvent("c", { text: "3 photos uploaded from Pooja", kind: "info", at: 1 }, NOW).kind, "upload");
   assert.equal(toEvent("d", { text: "mystery", kind: "info", at: null }, NOW).at, NOW);
+});
+
+test("days start at midnight Nepal time (UTC+5:45), not India time", () => {
+  assert.equal(TZ_OFFSET, 5.75 * HOUR);
+  // 18:15 UTC is exactly midnight in Nepal: it is the start of its own day...
+  const midnightNepal = Date.UTC(2026, 9, 5, 18, 15);
+  assert.equal(dayStart(midnightNepal), midnightNepal);
+  // ...and one minute earlier still belongs to the previous Nepal day.
+  assert.equal(dayStart(midnightNepal - MINUTE), midnightNepal - DAY);
+});
+
+const URL_BASE = "https://abc.supabase.co/storage/v1/object/public/Photos";
+
+test("a photo's files are its original and its thumbnail, found from the record's URLs", () => {
+  const photo = { fullUrl: `${URL_BASE}/w1/local-1-abc.jpg`, thumbUrl: `${URL_BASE}/w1/local-1-abc_thumb.jpg` };
+  assert.deepEqual(filesOf(photo), ["w1/local-1-abc.jpg", "w1/local-1-abc_thumb.jpg"]);
+});
+
+test("a record whose thumbnail is the original (older photos, videos) lists the file once", () => {
+  const url = `${URL_BASE}/w1/clip.mp4`;
+  assert.deepEqual(filesOf({ fullUrl: url, thumbUrl: url }), ["w1/clip.mp4"]);
+});
+
+test("a URL from somewhere else is not mistaken for a file in our bucket", () => {
+  assert.equal(storagePathFromUrl("https://example.com/photos/a.jpg"), null);
+  assert.deepEqual(filesOf({ fullUrl: "https://example.com/a.jpg", thumbUrl: "https://example.com/a.jpg" }), []);
+});
+
+test("encoded characters and cache-busting queries in a URL are resolved to the real path", () => {
+  assert.equal(storagePathFromUrl(`${URL_BASE}/w%201/a%20b.jpg?t=123`), "w 1/a b.jpg");
+});
+
+import { changesProblem, toCsv, toInventory, totalsByItem } from "./inventory.ts";
+
+const item = (id: string, name: string, quantity: number, unit: string, receivedAt: number) =>
+  toInventory(id, { personId: "p", personName: "Ram", siteId: "s", name, quantity, unit, receivedAt });
+
+test("inventory totals group by item and unit, ignoring case and spacing, keeping units apart", () => {
+  const totals = totalsByItem([
+    item("1", "Cement", 40, "bags", 1),
+    item("2", " cement ", 10, "Bags", 2),
+    item("3", "Cement", 500, "kg", 3),
+    item("4", "Sand", 2.5, "tonne", 4),
+  ]);
+  assert.deepEqual(
+    totals.map(t => [t.name, t.unit, t.quantity, t.deliveries]),
+    [
+      ["cement", "bags", 50, 2],
+      ["Cement", "kg", 500, 1],
+      ["Sand", "tonne", 2.5, 1],
+    ]
+  );
+});
+
+test("inventory mapping drops a blank note and keeps edit stamps", () => {
+  const e = toInventory("x", { name: "Rebar", quantity: 5, unit: "pcs", note: "  ", editedAt: 9, receivedAt: 1 });
+  assert.equal(e.note, undefined);
+  assert.equal(e.editedAt, 9);
+});
+
+test("owner changes are checked like the rules check them", () => {
+  const ok = { siteId: "s", name: "Cement", quantity: 4, unit: "bags" };
+  assert.equal(changesProblem(ok), null);
+  assert.match(changesProblem({ ...ok, quantity: 0 }) ?? "", /above 0/);
+  assert.match(changesProblem({ ...ok, quantity: NaN }) ?? "", /above 0/);
+  assert.match(changesProblem({ ...ok, unit: " " }) ?? "", /unit/);
+  assert.match(changesProblem({ ...ok, siteId: "" }) ?? "", /site/);
+});
+
+test("csv quotes cells with commas, quotes and line breaks", () => {
+  assert.equal(toCsv(["a", "b"], [["x,y", 'say "hi"'], ["line\nbreak", 3]]), 'a,b\n"x,y","say ""hi"""\n"line\nbreak",3');
+});
+
+test("datetime-local values round-trip in Nepal time", () => {
+  assert.equal(toLocalInput(Date.UTC(2026, 9, 5, 3, 15)), "2026-10-05T09:00");
+  assert.equal(fromLocalInput("2026-10-05T09:00"), Date.UTC(2026, 9, 5, 3, 15));
+  assert.ok(Number.isNaN(fromLocalInput("")));
+});
+
+test("a corrected check-out can't come before the check-in", () => {
+  assert.equal(sessionTimesProblem(NOW - HOUR, NOW, NOW), null);
+  assert.equal(sessionTimesProblem(NOW - HOUR, undefined, NOW), null);
+  assert.match(sessionTimesProblem(NOW - HOUR, NOW - 2 * HOUR, NOW) ?? "", /after check-in/);
+  assert.match(sessionTimesProblem(NaN, undefined, NOW) ?? "", /check-in/);
+  assert.match(sessionTimesProblem(NOW + HOUR, undefined, NOW) ?? "", /future/);
+});
+
+test("an admin-closed session is left as it is", () => {
+  const edited = [{ id: "a", personId: "p", siteId: "s", start: NOW - 5 * HOUR, end: NOW - 4 * HOUR, endReason: "admin" as const, editedAt: NOW }];
+  assert.deepEqual(settleSessions(edited, {}, NOW), edited);
+});
+
+test("inventory usage maps from the doc and totals add received, used and left", () => {
+  const delivered = toInventory("u", {
+    name: "Cement", quantity: 40, unit: "bags", receivedAt: 1, usedQuantity: 15,
+    usage: [{ quantity: 10, at: 2, note: " slab " }, { quantity: 5, at: 3 }, { bad: true }],
+  });
+  assert.deepEqual(delivered.usage, [{ quantity: 10, at: 2, note: "slab" }, { quantity: 5, at: 3, note: undefined }]);
+  const [t] = totalsByItem([delivered, toInventory("v", { name: "cement", quantity: 10, unit: "bags", receivedAt: 4 })]);
+  assert.deepEqual([t.quantity, t.used, t.left], [50, 15, 35]);
+  // Over-logged usage never shows negative stock.
+  assert.equal(totalsByItem([toInventory("w", { name: "Sand", quantity: 1, unit: "t", usedQuantity: 3 })])[0].left, 0);
+});
+
+test("a phone silent for more than 12 h is offline and off site, even if its last write named a site", () => {
+  const out = deriveCrew([person], { p: { siteId: "s", lastFixAt: NOW - 2 * DAY } }, NOW)[0];
+  assert.equal(out.status, "offline");
+  assert.equal(out.currentSiteId, undefined);
+  assert.equal(deriveCrew([person], { p: { siteId: "s", lastFixAt: NOW - 3 * HOUR } }, NOW)[0].status, "idle");
+});
+
+test("GPS accuracy is whole metres", () => {
+  assert.equal(toPhoto("x", { accuracy: 20.007999420166016 }).accuracy, 20);
+  assert.equal(deriveCrew([person], { p: { accuracy: 5.6, lastFixAt: NOW } }, NOW)[0].accuracy, 6);
+});
+
+test("overlapping sessions of one person count once and are flagged; different people still add up", () => {
+  const s = (id: string, personId: string, start: number, end: number) => ({ id, personId, siteId: "x", start, end });
+  const day = dayStart(NOW);
+  const twin = [s("a", "p", day + HOUR, day + 3 * HOUR), s("b", "p", day + 2 * HOUR, day + 4 * HOUR)];
+  assert.equal(hoursOnDay(twin, day), 3 * HOUR);
+  assert.deepEqual([...overlappingSessionIds(twin)].sort(), ["a", "b"]);
+  const two = [s("a", "p", day + HOUR, day + 3 * HOUR), s("c", "q", day + HOUR, day + 3 * HOUR)];
+  assert.equal(hoursOnDay(two, day), 4 * HOUR);
+  assert.equal(overlappingSessionIds(two).size, 0);
+});
+
+test("a day over 12 h is flagged as a long shift", () => {
+  const day = dayStart(NOW);
+  const [cell] = attendanceFor("p", [{ id: "a", personId: "p", siteId: "x", start: day, end: day + 13 * HOUR }], [day]);
+  assert.equal(cell.long, true);
+});
+
+test("back-to-back repeats fold into one event with a count", () => {
+  const e = (id: string, at: number, text: string) => ({ id, at, kind: "pause" as const, personId: "p", text, severity: "info" as const });
+  const out = collapseRepeats([e("1", NOW, "paused"), e("2", NOW - MINUTE, "paused"), e("3", NOW - 2 * MINUTE, "paused"), e("4", NOW - 3 * MINUTE, "resumed")]);
+  assert.deepEqual(out.map(x => [x.id, x.count]), [["1", 3], ["4", 1]]);
 });

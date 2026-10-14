@@ -1,10 +1,11 @@
 "use client";
 
-import { Check, Crosshair, Download, Film, ImageIcon, Images, Search, UserRound, X } from "lucide-react";
+import { CheckSquare, Check, Crosshair, Download, Film, ImageIcon, Images, Search, Trash2, UserRound, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { DeletePhotosDialog } from "@/components/domain/DeletePhotosDialog";
 import { TextInput } from "@/components/domain/FormBits";
 import { Lightbox } from "@/components/domain/Lightbox";
 import { PageHeader } from "@/components/domain/PageHeader";
@@ -23,8 +24,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDay } from "@/lib/format";
-import { DAY, istDayStart } from "@/lib/time";
-import { useLiveStore, useLookups, useNow } from "@/lib/store";
+import { DAY, dayStart } from "@/lib/time";
+import { attempt, useLiveStore, useLookups, useNow } from "@/lib/store";
+import { defaultSiteAmong } from "@/lib/prefs";
 import { cn } from "@/lib/utils";
 
 import type { SitePhoto } from "@/types/domain";
@@ -33,41 +35,47 @@ type Range = "today" | "7d" | "all";
 type Media = "all" | "photo" | "video";
 
 function dayLabel(day: number) {
-  const today = istDayStart(Date.now());
+  const today = dayStart(Date.now());
   if (day === today) return "Today";
   if (day === today - DAY) return "Yesterday";
   return formatDay(day);
 }
 
 export function PhotosView({ initialSite }: { initialSite?: string }) {
-  const { photos, sites, crew } = useLiveStore();
+  const { photos, sites, crew, deletePhotos } = useLiveStore();
   const { personById } = useLookups();
   const now = useNow();
-  const [site, setSite] = useState<string>(initialSite && sites.some(s => s.id === initialSite) ? initialSite : "all");
+  const [site, setSite] = useState<string>(() => (initialSite && sites.some(s => s.id === initialSite) ? initialSite : defaultSiteAmong(sites)));
   const [person, setPerson] = useState("all");
   const [range, setRange] = useState<Range>("7d");
   const [media, setMedia] = useState<Media>("all");
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  /** Photos waiting on the delete confirmation. */
+  const [pendingDelete, setPendingDelete] = useState<SitePhoto[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
-  const filtered = useMemo(() => {
-    const today = istDayStart(now);
+  /** Every filter but the site: the site chips count from this, so each chip shows what clicking it would show. */
+  const beforeSite = useMemo(() => {
+    const today = dayStart(now);
     const from = range === "today" ? today : range === "7d" ? today - 6 * DAY : 0;
     const q = query.trim().toLowerCase();
     return photos.filter(
       p =>
         p.takenAt >= from &&
-        (site === "all" || p.siteId === site) &&
         (person === "all" || p.personId === person) &&
         (media === "all" || p.mediaType === media) &&
-        (!q || p.task.toLowerCase().includes(q) || personById.get(p.personId)?.name.toLowerCase().includes(q))
+        (!q || p.task.toLowerCase().includes(q) || p.note?.toLowerCase().includes(q) || personById.get(p.personId)?.name.toLowerCase().includes(q))
     );
-  }, [photos, site, person, range, media, query, personById, now]);
+  }, [photos, person, range, media, query, personById, now]);
+  const filtered = useMemo(() => beforeSite.filter(p => site === "all" || p.siteId === site), [beforeSite, site]);
 
   const groups = useMemo(() => {
     const map = new Map<number, SitePhoto[]>();
     for (const p of filtered) {
-      const d = istDayStart(p.takenAt);
+      const d = dayStart(p.takenAt);
       map.set(d, [...(map.get(d) ?? []), p]);
     }
     return [...map.entries()].sort((a, b) => b[0] - a[0]);
@@ -79,20 +87,81 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
   const hasFilters = site !== "all" || person !== "all" || media !== "all" || query !== "";
   const photographers = crew.filter(c => photos.some(p => p.personId === c.id));
 
+  const toggle = (photo: SitePhoto) =>
+    setSelected(previous => {
+      const next = new Set(previous);
+      if (next.has(photo.id)) next.delete(photo.id);
+      else next.add(photo.id);
+      return next;
+    });
+  const stopSelecting = () => {
+    setSelecting(false);
+    setSelected(new Set());
+  };
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    const outcome = await attempt("Deleting photos", () => deletePhotos(pendingDelete), {
+      targetType: "photo",
+      targetId: pendingDelete.length === 1 ? pendingDelete[0].id : undefined,
+      note: `${pendingDelete.length} photo(s)`,
+    });
+    setDeleting(false);
+    setPendingDelete([]);
+    if (!outcome) return;
+    const { deleted, failed } = outcome.value;
+    if (deleted.length) {
+      toast.success(`${deleted.length} ${deleted.length === 1 ? "photo" : "photos"} deleted`, {
+        description: "File, thumbnail and record are all gone.",
+      });
+      setOpenId(null);
+      setSelected(previous => new Set([...previous].filter(id => !deleted.includes(id))));
+    }
+    if (failed.length) {
+      toast.error(`${failed.length} could not be deleted`, { description: failed[0].reason });
+    }
+  };
+
   return (
     <>
       <PageHeader
         title="Photos"
         description="Every geotagged capture, filed by site and by who took it. Thumbnails load first; the full-resolution original loads when you open one."
         actions={
-          <Button
-            variant="outline"
-            size="lg"
-            className="rounded-xl bg-card"
-            onClick={() => toast.success("Export started", { description: `${filtered.length} originals will be zipped with their GPS metadata.` })}
-          >
-            <Download /> Export {filtered.length}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {selecting ? (
+              <>
+                <Button variant="outline" size="lg" className="bg-card" onClick={() => setSelected(new Set(filtered.map(p => p.id)))}>
+                  <CheckSquare /> Select all {filtered.length}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="lg"
+                  disabled={selected.size === 0}
+                  onClick={() => setPendingDelete(filtered.filter(p => selected.has(p.id)))}
+                >
+                  <Trash2 /> Delete {selected.size || ""}
+                </Button>
+                <Button variant="ghost" size="lg" onClick={stopSelecting}>
+                  Done
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="lg" className="bg-card" onClick={() => setSelecting(true)}>
+                  <CheckSquare /> Select
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="bg-card"
+                  onClick={() => toast.success("Export started", { description: `${filtered.length} originals will be zipped with their GPS metadata.` })}
+                >
+                  <Download /> Export {filtered.length}
+                </Button>
+              </>
+            )}
+          </div>
         }
       />
 
@@ -100,7 +169,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
       <div className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-thin">
         {[{ id: "all", name: "All sites", color: "var(--primary)" }, ...sites].map(s => {
           const active = site === s.id;
-          const count = s.id === "all" ? photos.length : photos.filter(p => p.siteId === s.id).length;
+          const count = s.id === "all" ? beforeSite.length : beforeSite.filter(p => p.siteId === s.id).length;
           return (
             <motion.button
               key={s.id}
@@ -214,7 +283,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
           {groups.map(([day, items]) => (
             <section key={day}>
               <div className="sticky top-[72px] z-10 -mx-2 mb-3 flex items-center gap-3 bg-background/85 px-2 py-2 backdrop-blur">
-                <h2 className="text-base font-extrabold">{dayLabel(day)}</h2>
+                <h2 className="text-base font-semibold">{dayLabel(day)}</h2>
                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground">{items.length}</span>
                 <span className="h-px flex-1 bg-border" />
                 <button
@@ -225,14 +294,17 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
                   <Check className="size-3.5" /> Day report
                 </button>
               </div>
-              <div className="columns-2 gap-3 sm:columns-3 lg:columns-4 2xl:columns-5 [&>*]:mb-3">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
                 {items.map((p, i) => (
                   <PhotoThumb
                     key={p.id}
                     photo={p}
                     index={i}
                     onOpen={ph => setOpenId(ph.id)}
-                    className={p.height > p.width ? "aspect-[3/4]" : "aspect-[4/3]"}
+                    selecting={selecting}
+                    selected={selected.has(p.id)}
+                    onToggle={toggle}
+                    className="aspect-[4/3]"
                   />
                 ))}
               </div>
@@ -241,7 +313,19 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
         </div>
       )}
 
-      <Lightbox photos={filtered} openId={openId} onClose={() => setOpenId(null)} onChange={setOpenId} />
+      <Lightbox
+        photos={filtered}
+        openId={openId}
+        onClose={() => setOpenId(null)}
+        onChange={setOpenId}
+        onDelete={photo => setPendingDelete([photo])}
+      />
+      <DeletePhotosDialog
+        count={pendingDelete.length}
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete([])}
+      />
     </>
   );
 }

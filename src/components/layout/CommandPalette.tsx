@@ -16,17 +16,19 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
+import { useIsSuperadmin } from "@/components/auth/AuthProvider";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
 import { useLiveStore } from "@/lib/store";
 
 import { useDialogs } from "./DialogsProvider";
-import { NAV_ITEMS } from "./nav";
+import { navItemsFor } from "./nav";
 
 /** Ctrl/⌘+K: jump to any page, person or site, or start a creation flow. */
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const router = useRouter();
   const { sites, crew } = useLiveStore();
   const { openAddCrew, openCreateSite } = useDialogs();
+  const isSuperadmin = useIsSuperadmin();
   const { setTheme, resolvedTheme } = useTheme();
 
   useEffect(() => {
@@ -65,7 +67,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
           </CommandGroup>
           <CommandSeparator />
           <CommandGroup heading="Pages">
-            {NAV_ITEMS.map(item => (
+            {navItemsFor(isSuperadmin).map(item => (
               <CommandItem key={item.href} value={`page ${item.label}`} onSelect={() => run(() => router.push(item.href))}>
                 <item.icon /> {item.label}
                 <span className="ml-auto text-xs text-muted-foreground">{item.description}</span>

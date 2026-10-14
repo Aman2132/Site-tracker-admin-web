@@ -16,6 +16,7 @@ import { motion } from "motion/react";
 
 import { EASE_OUT } from "@/components/motion";
 import { formatTime, timeAgo } from "@/lib/format";
+import { collapseRepeats } from "@/lib/insights";
 import { useLookups } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +46,7 @@ export function ActivityFeed({
   const { siteById } = useLookups();
   return (
     <ol className="relative">
-      {events.map((event, i) => {
+      {collapseRepeats(events).map((event, i, shown) => {
         const meta = EVENT_META[event.kind];
         const site = event.siteId ? siteById.get(event.siteId) : undefined;
         return (
@@ -56,12 +57,15 @@ export function ActivityFeed({
             transition={{ duration: 0.4, ease: EASE_OUT, delay: Math.min(i, 12) * 0.035 }}
             className="relative flex gap-3 pb-4 last:pb-0"
           >
-            {i < events.length - 1 && <span className="absolute top-9 bottom-0 left-[17px] w-px bg-border" />}
+            {i < shown.length - 1 && <span className="absolute top-9 bottom-0 left-[17px] w-px bg-border" />}
             <span className={cn("relative z-10 flex size-9 shrink-0 items-center justify-center rounded-xl", meta.tone)}>
               <meta.icon className="size-4" strokeWidth={2.2} />
             </span>
             <div className="min-w-0 flex-1 pt-0.5">
-              <p className={cn("text-sm leading-snug font-medium", compact && "line-clamp-2")}>{event.text}</p>
+              <p className={cn("text-sm leading-snug font-medium", compact && "line-clamp-2")}>
+                {event.text}
+                {event.count > 1 && <span className="ml-1.5 rounded bg-muted px-1.5 text-xs font-bold text-muted-foreground">×{event.count}</span>}
+              </p>
               <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span>{compact ? timeAgo(event.at) : formatTime(event.at)}</span>
                 {showSite && site && (

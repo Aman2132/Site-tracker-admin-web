@@ -10,36 +10,35 @@ import { PageHeader } from "@/components/domain/PageHeader";
 import { EmptyState } from "@/components/domain/Panel";
 import { AvatarStack } from "@/components/domain/PersonAvatar";
 import { SegmentedControl } from "@/components/domain/SegmentedControl";
-import { SiteStatusBadge } from "@/components/domain/SiteStatusBadge";
+import { SiteStatusBadge, siteStatusBar } from "@/components/domain/SiteStatusBadge";
 import { useDialogs } from "@/components/layout/DialogsProvider";
 import { EASE_OUT } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { formatHours } from "@/lib/format";
-import { lastNDays } from "@/lib/insights";
-import { istDayStart } from "@/lib/time";
+import { hoursOnDay, isOnShift, lastNDays } from "@/lib/insights";
+import { dayStart } from "@/lib/time";
 import { useLiveStore, useNow } from "@/lib/store";
+import { cn } from "@/lib/utils";
 
 import type { Site, SiteStatus } from "@/types/domain";
 
 type Filter = "all" | SiteStatus;
 
 function useSiteSummaries() {
-  const { sites, crew, sessions, photos } = useLiveStore();
+  const { sites, roster: crew, sessions, photos } = useLiveStore();
   const now = useNow();
   return useMemo(() => {
-    const today = istDayStart(now);
+    const today = dayStart(now);
     const weekStart = lastNDays(7)[0];
     return sites.map(site => {
       const assigned = crew.filter(c => c.siteIds.includes(site.id) && c.status !== "deactivated");
-      const here = crew.filter(c => c.currentSiteId === site.id && (c.status === "online" || c.status === "idle"));
+      const here = crew.filter(c => isOnShift(c) && c.currentSiteId === site.id);
       return {
         site,
         assigned,
         here,
         photosWeek: photos.filter(p => p.siteId === site.id && p.takenAt >= weekStart).length,
-        hoursToday: sessions
-          .filter(s => s.siteId === site.id && s.start >= today)
-          .reduce((sum, s) => sum + ((s.end ?? now) - s.start), 0),
+        hoursToday: hoursOnDay(sessions.filter(s => s.siteId === site.id), today),
       };
     });
   }, [sites, crew, sessions, photos, now]);
@@ -56,29 +55,26 @@ function SiteCard({ summary, index }: { summary: Summary; index: number }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.45, ease: EASE_OUT, delay: Math.min(index, 8) * 0.05 }}
-      whileHover={{ y: -5 }}
+      whileHover={{ y: -2 }}
     >
-      <Link href={`/sites/${site.id}`} className="surface group block overflow-hidden rounded-3xl transition-shadow hover:shadow-lift">
-        <div className="relative">
-          <div className="h-24 w-full" style={{ backgroundColor: site.color }}>
-            <div className="bg-grid size-full opacity-30" />
-          </div>
-          <div className="absolute top-3 left-3">
-            <SiteStatusBadge status={site.status} className="shadow-card" />
-          </div>
-          {here.length > 0 && (
-            <div className="absolute top-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-card/90 px-2.5 py-0.5 text-xs font-bold shadow-card backdrop-blur">
-              <span className="relative inline-flex size-1.5 rounded-full bg-success">
-                <span className="absolute inset-0 animate-ping-soft rounded-full bg-success" />
-              </span>
-              {here.length} on site
-            </div>
-          )}
-        </div>
+      <Link href={`/sites/${site.id}`} className="surface group block overflow-hidden rounded-xl transition-shadow hover:shadow-lift">
+        {/* Strip in the status colour, so it reads the same as the badge below it. */}
+        <div className={cn("h-1 w-full", siteStatusBar(site.status))} />
         <div className="p-5">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <SiteStatusBadge status={site.status} />
+            {here.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-success">
+                <span className="relative inline-flex size-1.5 rounded-full bg-success">
+                  <span className="absolute inset-0 animate-ping-soft rounded-full bg-success" />
+                </span>
+                {here.length} on site
+              </span>
+            )}
+          </div>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="truncate text-lg font-extrabold tracking-tight transition-colors group-hover:text-primary">{site.name}</h3>
+              <h3 className="truncate text-lg font-semibold tracking-tight transition-colors group-hover:text-primary">{site.name}</h3>
               <div className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
                 <span className="font-mono text-xs">{site.code}</span>
               </div>
@@ -88,22 +84,22 @@ function SiteCard({ summary, index }: { summary: Summary; index: number }) {
 
           <div className="mt-4 grid grid-cols-3 divide-x divide-border rounded-2xl bg-muted/60 py-2.5 text-center">
             <div>
-              <div className="flex items-center justify-center gap-1 text-sm font-extrabold">
+              <div className="flex items-center justify-center gap-1 text-sm font-semibold">
                 <Users className="size-3.5 text-muted-foreground" /> {assigned.length}
               </div>
-              <div className="text-[10px] font-semibold text-muted-foreground uppercase">Crew</div>
+              <div className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Crew</div>
             </div>
             <div>
-              <div className="flex items-center justify-center gap-1 text-sm font-extrabold">
+              <div className="flex items-center justify-center gap-1 text-sm font-semibold">
                 <Clock className="size-3.5 text-muted-foreground" /> {formatHours(hoursToday)}
               </div>
-              <div className="text-[10px] font-semibold text-muted-foreground uppercase">Today</div>
+              <div className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Today</div>
             </div>
             <div>
-              <div className="flex items-center justify-center gap-1 text-sm font-extrabold">
+              <div className="flex items-center justify-center gap-1 text-sm font-semibold">
                 <ImageIcon className="size-3.5 text-muted-foreground" /> {photosWeek}
               </div>
-              <div className="text-[10px] font-semibold text-muted-foreground uppercase">Photos/wk</div>
+              <div className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Photos/wk</div>
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">

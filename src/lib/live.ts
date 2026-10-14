@@ -28,7 +28,9 @@ export function deriveCrew(people: PersonDoc[], positions: Record<string, Positi
   return people.map(person => {
     const position = positions[person.id];
     const lastFix = position?.lastFixAt;
-    const checkedIn = Boolean(position?.siteId);
+    // A phone silent for longer than a shift is not on shift, even if its last write still names a site.
+    const abandoned = lastFix != null && now - lastFix > ABANDONED_SESSION_MS;
+    const checkedIn = Boolean(position?.siteId) && !abandoned;
     const fresh = lastFix != null && now - lastFix <= SIGNAL_LOST_AFTER_MS;
 
     const status: CrewMember["status"] =
@@ -58,7 +60,7 @@ export function deriveCrew(people: PersonDoc[], positions: Record<string, Positi
       siteIds: person.siteIds ?? [],
       currentSiteId: checkedIn && position?.siteId ? position.siteId : undefined,
       battery: position?.battery,
-      accuracy: position?.accuracy,
+      accuracy: position?.accuracy != null ? Math.round(position.accuracy) : undefined,
       lastSeenAt: lastFix,
       joinedAt: person.invitedAt,
       ...(hasPosition ? { lat: position.lat, lng: position.lng } : {}),
@@ -145,10 +147,12 @@ export function toPhoto(id: string, data: Record<string, unknown>): SitePhoto {
     personId: String(data.personId ?? ""),
     siteId: typeof data.siteId === "string" ? data.siteId : "",
     task: String(data.task ?? ""),
+    note: typeof data.note === "string" && data.note.trim() ? data.note.trim() : undefined,
+    inventoryId: typeof data.inventoryId === "string" && data.inventoryId ? data.inventoryId : undefined,
     takenAt: Number(data.takenAt ?? 0),
     lat: Number(data.lat ?? 0),
     lng: Number(data.lng ?? 0),
-    accuracy: Number(data.accuracy ?? 0),
+    accuracy: Math.round(Number(data.accuracy ?? 0)),
     plusCode: String(data.plusCode ?? ""),
   };
 }

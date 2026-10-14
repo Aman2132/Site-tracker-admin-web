@@ -58,7 +58,7 @@ export function StatCard({
         </span>
       </div>
       <div className="mt-2 flex items-baseline gap-1">
-        <CountUp value={value} decimals={decimals} className="text-[32px] leading-none font-extrabold tracking-tight" />
+        <CountUp value={value} decimals={decimals} className="text-[32px] leading-none font-semibold tracking-tight" />
         {suffix && <span className="text-lg font-bold text-muted-foreground">{suffix}</span>}
       </div>
       <div className="mt-4 flex items-end justify-between gap-3">
@@ -75,7 +75,7 @@ export function StatCard({
               {Math.round(delta * 100)}%
             </span>
           )}
-          <span className="whitespace-nowrap text-muted-foreground">{footnote ?? deltaLabel}</span>
+          <span className="text-muted-foreground">{footnote ?? (delta != null ? deltaLabel : "no comparison yet")}</span>
         </div>
         {trend && <Sparkline data={trend} color={TONES[tone].line} className="h-9 w-20 shrink-0" />}
       </div>

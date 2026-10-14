@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
 import { BarCompare } from "@/components/charts/BarCompare";
 import { ActivityFeed } from "@/components/domain/ActivityFeed";
 import { AssignCrewSheet } from "@/components/domain/AssignSheet";
-import { Lightbox } from "@/components/domain/Lightbox";
+import { DeletableLightbox } from "@/components/domain/DeletableLightbox";
 import { EmptyState, Panel } from "@/components/domain/Panel";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
 import { PhotoThumb } from "@/components/domain/PhotoThumb";
@@ -25,9 +25,9 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatDate, formatHours, formatWeekday, timeAgo } from "@/lib/format";
-import { hoursOnDay, lastNDays } from "@/lib/insights";
-import { DAY, HOUR, istDayStart } from "@/lib/time";
+import { formatDate, formatHours, formatWeekday, plural, timeAgo } from "@/lib/format";
+import { hoursOnDay, isOnShift, lastNDays } from "@/lib/insights";
+import { DAY, HOUR, dayStart } from "@/lib/time";
 import { attempt, useLiveStore, useNow } from "@/lib/store";
 import { useTarget } from "@/lib/useTarget";
 import { cn } from "@/lib/utils";
@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
 import type { SiteStatus } from "@/types/domain";
 
 export function SiteDetailView({ id }: { id: string }) {
-  const { sites, crew, sessions, photos, events, setSiteStatus } = useLiveStore();
+  const { sites, roster: crew, sessions, photos, events, setSiteStatus } = useLiveStore();
   const now = useNow();
   const { openAddCrew } = useDialogs();
   const assign = useTarget();
@@ -46,7 +46,7 @@ export function SiteDetailView({ id }: { id: string }) {
     if (!site) return null;
     const siteSessions = sessions.filter(s => s.siteId === site.id);
     const days = lastNDays(7);
-    const today = istDayStart(now);
+    const today = dayStart(now);
     const sitePhotos = photos.filter(p => p.siteId === site.id);
     return {
       perDay: days.map(day => ({
@@ -80,7 +80,7 @@ export function SiteDetailView({ id }: { id: string }) {
   }
 
   const assigned = crew.filter(c => c.siteIds.includes(site.id) && c.status !== "deactivated");
-  const here = crew.filter(c => c.currentSiteId === site.id && (c.status === "online" || c.status === "idle"));
+  const here = crew.filter(c => isOnShift(c) && c.currentSiteId === site.id);
   const gallery = data.photos.slice(0, 8);
 
   return (
@@ -104,7 +104,7 @@ export function SiteDetailView({ id }: { id: string }) {
               </motion.span>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{site.name}</h1>
+                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{site.name}</h1>
                   <DropdownMenu>
                     <DropdownMenuTrigger render={<button type="button" className="inline-flex items-center gap-1 rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Change status" />}>
                       <SiteStatusBadge status={site.status} /> <ChevronDown className="size-3.5 text-muted-foreground" />
@@ -112,7 +112,7 @@ export function SiteDetailView({ id }: { id: string }) {
                     <DropdownMenuContent align="start" className="w-44">
                       <DropdownMenuRadioGroup
                         value={site.status}
-                        onValueChange={v => attempt("Updating status", () => setSiteStatus(site.id, v as SiteStatus))}
+                        onValueChange={v => attempt("Updating status", () => setSiteStatus(site.id, v as SiteStatus), { targetType: "site", targetId: site.id, note: String(v) })}
                       >
                         {(["planning", "active", "paused", "completed"] as const).map(status => (
                           <DropdownMenuRadioItem key={status} value={status} className="capitalize">
@@ -152,7 +152,7 @@ export function SiteDetailView({ id }: { id: string }) {
               <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                 <stat.icon className="size-4" style={{ color: site.color }} /> {stat.label}
               </div>
-              <div className="mt-2 text-2xl font-extrabold tracking-tight">
+              <div className="mt-2 text-2xl font-semibold tracking-tight">
                 <CountUp value={stat.value} decimals={stat.decimals ?? 0} suffix={stat.suffix} />
               </div>
             </div>
@@ -196,7 +196,7 @@ export function SiteDetailView({ id }: { id: string }) {
           </Panel>
           <Panel
             title="Assigned crew"
-            description={`${assigned.length} people`}
+            description={plural(assigned.length, "person", "people")}
             action={<Button variant="ghost" size="sm" className="rounded-lg" onClick={() => assign.show(site.id)}>Manage</Button>}
           >
             <div className="overflow-x-auto scrollbar-thin">
@@ -213,9 +213,13 @@ export function SiteDetailView({ id }: { id: string }) {
                           </div>
                         </Link>
                       </td>
-                      <td className="px-3 py-2.5"><StatusChip status={p.status} /></td>
-                      <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
-                        {data.todayHoursBy(p.id) ? formatHours(data.todayHoursBy(p.id)) : <span className="text-faint">—</span>}
+                      <td className="px-3 py-2.5"><StatusChip status={p.status} since={p.lastSeenAt} /></td>
+                      <td className="px-3 py-2.5 text-right text-xs whitespace-nowrap text-muted-foreground">
+                        {data.todayHoursBy(p.id) > 0 && (
+                          <>
+                            <b className="text-sm text-foreground tabular-nums">{formatHours(data.todayHoursBy(p.id))}</b> today
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -258,7 +262,7 @@ export function SiteDetailView({ id }: { id: string }) {
       </Stagger>
 
       <AssignCrewSheet key={assign.key} siteId={assign.id} open={assign.open} onOpenChange={assign.setOpen} />
-      <Lightbox photos={gallery} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
+      <DeletableLightbox photos={gallery} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
     </>
   );
 }

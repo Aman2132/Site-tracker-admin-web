@@ -5,7 +5,10 @@ import {
   Images,
   LayoutDashboard,
   Map,
+  Package,
+  ScrollText,
   Settings,
+  ShieldCheck,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -15,6 +18,8 @@ export interface NavItem {
   label: string;
   icon: LucideIcon;
   description: string;
+  /** Shown to the superadmin only. */
+  superadmin?: boolean;
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -23,10 +28,15 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/sites", label: "Sites", icon: Building2, description: "Projects and their crew" },
   { href: "/crew", label: "Crew", icon: Users, description: "People, roles and assignments" },
   { href: "/photos", label: "Photos", icon: Images, description: "Geotagged site photos" },
+  { href: "/inventory", label: "Inventory", icon: Package, description: "Items received on site" },
   { href: "/attendance", label: "Attendance", icon: CalendarClock, description: "Online / offline history" },
   { href: "/activity", label: "Activity", icon: Activity, description: "Everything that happened" },
+  { href: "/admins", label: "Admins", icon: ShieldCheck, description: "Who has admin access", superadmin: true },
+  { href: "/audit", label: "Audit log", icon: ScrollText, description: "Every admin edit", superadmin: true },
   { href: "/settings", label: "Settings", icon: Settings, description: "Your account and appearance" },
 ];
+
+export const navItemsFor = (isSuperadmin: boolean) => NAV_ITEMS.filter(item => isSuperadmin || !item.superadmin);
 
 export function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);

@@ -28,7 +28,7 @@ export function AssignSitesSheet({
 
   const save = async () => {
     if (!person) return;
-    if (!(await attempt("Updating sites", () => setPersonSites(person.id, selected)))) return;
+    if (!(await attempt("Updating sites", () => setPersonSites(person.id, selected), { targetType: "person", targetId: person.id }))) return;
     toast.success(`Sites updated for ${person.name}`, { description: `${selected.length} site${selected.length === 1 ? "" : "s"} assigned.` });
     onOpenChange(false);
   };
@@ -37,7 +37,7 @@ export function AssignSitesSheet({
     <Sheet open={open && !!person} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 sm:max-w-md">
         <SheetHeader className="border-b border-border p-6">
-          <SheetTitle className="text-lg font-extrabold">Assign sites</SheetTitle>
+          <SheetTitle className="text-lg font-semibold">Assign sites</SheetTitle>
           <SheetDescription>Photos and attendance are filed under these sites.</SheetDescription>
           {person && (
             <div className="mt-3 flex items-center gap-3 rounded-2xl bg-muted/60 p-3">
@@ -46,7 +46,7 @@ export function AssignSitesSheet({
                 <div className="truncate font-bold">{person.name}</div>
                 <div className="text-xs text-muted-foreground">{person.jobTitle}</div>
               </div>
-              <StatusChip status={person.status} />
+              <StatusChip status={person.status} since={person.lastSeenAt} />
             </div>
           )}
         </SheetHeader>
@@ -112,7 +112,7 @@ export function AssignCrewSheet({
     const before = assignable.filter(c => c.siteIds.includes(site.id)).map(c => c.id);
     const added = selected.filter(id => !before.includes(id));
     const removed = before.filter(id => !selected.includes(id));
-    if (!(await attempt("Updating crew", () => setSiteCrew(site.id, added, removed)))) return;
+    if (!(await attempt("Updating crew", () => setSiteCrew(site.id, added, removed), { targetType: "site", targetId: site.id }))) return;
     toast.success(`Crew updated for ${site.name}`, { description: `${selected.length} people assigned.` });
     onOpenChange(false);
   };
@@ -121,7 +121,7 @@ export function AssignCrewSheet({
     <Sheet open={open && !!site} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 sm:max-w-md">
         <SheetHeader className="border-b border-border p-6">
-          <SheetTitle className="text-lg font-extrabold">Assign crew</SheetTitle>
+          <SheetTitle className="text-lg font-semibold">Assign crew</SheetTitle>
           <SheetDescription>{site?.name}</SheetDescription>
           <div className="relative mt-3">
             <Search className="absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />

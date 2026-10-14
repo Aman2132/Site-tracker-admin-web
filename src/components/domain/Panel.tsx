@@ -19,7 +19,7 @@ export function Panel({
   bodyClassName?: string;
 }) {
   return (
-    <section className={cn("surface flex flex-col rounded-2xl", className)}>
+    <section className={cn("surface flex min-w-0 flex-col rounded-2xl", className)}>
       {(title || action) && (
         <header className="flex items-start justify-between gap-3 px-5 pt-5 sm:px-6">
           <div className="min-w-0">

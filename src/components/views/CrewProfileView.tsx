@@ -5,9 +5,11 @@ import {
   Building2,
   CalendarDays,
   Clock,
+  CopyX,
   Crosshair,
   ImageIcon,
   Mail,
+  Pencil,
   MailPlus,
   Phone,
   Timer,
@@ -24,26 +26,29 @@ import { ActivityFeed } from "@/components/domain/ActivityFeed";
 import { AssignSitesSheet } from "@/components/domain/AssignSheet";
 import { BatteryMeter } from "@/components/domain/BatteryMeter";
 import { CrewMap } from "@/components/domain/CrewMap";
-import { Lightbox } from "@/components/domain/Lightbox";
+import { DeletableLightbox } from "@/components/domain/DeletableLightbox";
 import { EmptyState, Panel } from "@/components/domain/Panel";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
 import { PhotoThumb } from "@/components/domain/PhotoThumb";
 import { PresenceTimeline } from "@/components/domain/PresenceTimeline";
+import { SessionEditDialog } from "@/components/domain/SessionEditDialog";
 import { StatusChip } from "@/components/domain/StatusDot";
 import { CountUp, Stagger, StaggerItem } from "@/components/motion";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { formatClock, formatDate, formatWeekday, istHourOfDay, timeAgo } from "@/lib/format";
-import { attendanceFor, lastNDays } from "@/lib/insights";
+import { formatClock, formatDate, formatDay, formatHours, formatTime, formatWeekday, hourOfDay, roleLabel, timeAgo } from "@/lib/format";
+import { attendanceFor, isOnShift, lastNDays, overlappingSessionIds } from "@/lib/insights";
 import { HOUR } from "@/lib/time";
-import { attempt, useLiveStore } from "@/lib/store";
+import { attempt, useLiveStore, useNow } from "@/lib/store";
 import { useTarget } from "@/lib/useTarget";
 import { cn } from "@/lib/utils";
 
 export function CrewProfileView({ id }: { id: string }) {
-  const { crew, sites, sessions, photos, events, setCrewActive, resendInvite } = useLiveStore();
+  const { crew, sites, sessions, photos, events, setCrewActive, resendInvite, updateSession } = useLiveStore();
+  const now = useNow();
   const person = crew.find(c => c.id === id);
   const assign = useTarget();
   const [openPhoto, setOpenPhoto] = useState<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
 
   const data = useMemo(() => {
     if (!person) return null;
@@ -51,7 +56,7 @@ export function CrewProfileView({ id }: { id: string }) {
     const cells = attendanceFor(person.id, sessions, days14);
     const week = cells.slice(7);
     const present = cells.filter(c => c.sessions.length > 0);
-    const arrivals = present.map(c => istHourOfDay(c.firstIn!));
+    const arrivals = present.map(c => hourOfDay(c.firstIn!));
     const myPhotos = photos.filter(p => p.personId === person.id);
     const weekStart = days14[7];
     return {
@@ -64,6 +69,8 @@ export function CrewProfileView({ id }: { id: string }) {
       photos: myPhotos,
       weekPhotos: myPhotos.filter(p => p.takenAt >= weekStart).length,
       events: events.filter(e => e.personId === person.id).slice(0, 12),
+      sessions: sessions.filter(s => s.personId === person.id),
+      overlaps: overlappingSessionIds(sessions.filter(s => s.personId === person.id)),
     };
   }, [person, sessions, photos, events]);
 
@@ -83,7 +90,8 @@ export function CrewProfileView({ id }: { id: string }) {
   }
 
   const mySites = sites.filter(s => person.siteIds.includes(s.id));
-  const currentSite = sites.find(s => s.id === person.currentSiteId);
+  // One answer to "where are they now", shared with the status chip and the Assigned sites badge.
+  const currentSite = isOnShift(person) ? sites.find(s => s.id === person.currentSiteId) : undefined;
   const deactivated = person.status === "deactivated";
 
   return (
@@ -96,18 +104,15 @@ export function CrewProfileView({ id }: { id: string }) {
         {/* Header */}
         <StaggerItem>
           <div className="surface relative overflow-hidden rounded-3xl">
-            <div className="h-28 bg-hero sm:h-32">
-              <div className="bg-grid size-full opacity-40" />
-            </div>
-            <div className="flex flex-col gap-5 px-6 pb-6 sm:flex-row sm:items-end sm:px-8">
-              <div className="-mt-12 rounded-full bg-card p-1.5 shadow-lift sm:-mt-14">
+            <div className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:px-8">
+              <div className="shrink-0 rounded-full bg-card p-1.5 shadow-lift">
                 <PersonAvatar person={person} size="xl" showStatus={person.status === "online" || person.status === "idle"} />
               </div>
-              <div className="min-w-0 flex-1 sm:pt-4">
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{person.name}</h1>
-                  <StatusChip status={person.status} />
-                  {person.appRole === "owner" && <span className="rounded-full bg-accent px-2.5 py-0.5 text-xs font-bold text-primary">Admin</span>}
+                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{person.name}</h1>
+                  <StatusChip status={person.status} since={person.lastSeenAt} />
+                  {person.appRole !== "worker" && <span className="rounded-full bg-accent px-2.5 py-0.5 text-xs font-bold text-primary">{roleLabel(person.appRole)}</span>}
                 </div>
                 <div className="mt-1 text-muted-foreground">
                   {[person.jobTitle, person.team].filter(Boolean).join(" · ")}
@@ -131,7 +136,7 @@ export function CrewProfileView({ id }: { id: string }) {
                     className="rounded-xl"
                     onClick={async () => {
                       if (!person.email) return toast.error("No email on file for this person.");
-                      if (await attempt("Resending the invite", () => resendInvite(person.email)))
+                      if (await attempt("Resending the invite", () => resendInvite(person.email), { targetType: "person", targetId: person.id }))
                         toast.success("Invite re-sent", { description: `New set-password link sent to ${person.email}.` });
                     }}
                   >
@@ -146,7 +151,7 @@ export function CrewProfileView({ id }: { id: string }) {
                   size="lg"
                   className="rounded-xl"
                   onClick={async () => {
-                    if (!(await attempt(deactivated ? "Reactivating" : "Deactivating", () => setCrewActive(person.id, person.name, deactivated)))) return;
+                    if (!(await attempt(deactivated ? "Reactivating" : "Deactivating", () => setCrewActive(person.id, person.name, deactivated), { targetType: "person", targetId: person.id }))) return;
                     toast(deactivated ? `${person.name} reactivated` : `${person.name} deactivated`);
                   }}
                 >
@@ -174,7 +179,7 @@ export function CrewProfileView({ id }: { id: string }) {
               <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                 <stat.icon className="size-4 text-primary" /> {stat.label}
               </div>
-              <div className="mt-2 text-2xl font-extrabold tracking-tight">{stat.node}</div>
+              <div className="mt-2 text-2xl font-semibold tracking-tight">{stat.node}</div>
               {stat.sub && <div className="mt-0.5 text-xs text-muted-foreground">{stat.sub}</div>}
             </div>
           ))}
@@ -254,7 +259,7 @@ export function CrewProfileView({ id }: { id: string }) {
                         <div className="truncate text-sm font-bold">{s.name}</div>
                         <div className="text-xs text-muted-foreground">{s.code}</div>
                       </div>
-                      {s.id === person.currentSiteId && <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-bold text-success">Working now</span>}
+                      {s.id === currentSite?.id && <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-bold text-success">Working now</span>}
                     </Link>
                   </li>
                 ))}
@@ -268,6 +273,70 @@ export function CrewProfileView({ id }: { id: string }) {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">Nothing yet.</p>
+            )}
+          </Panel>
+        </StaggerItem>
+
+        <StaggerItem>
+          <Panel title="Check-ins" description="Last 15 days, newest first. Edit to correct a wrong or missing check-in or check-out.">
+            {data.overlaps.size > 0 && (
+              <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning-soft px-3 py-2.5 text-sm text-warning">
+                <CopyX className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  {data.overlaps.size} check-ins overlap each other. Their hours are merged and counted once everywhere; edit one of them to
+                  remove the duplicate.
+                </span>
+              </div>
+            )}
+            {data.sessions.length ? (
+              <div className="max-h-[360px] overflow-auto scrollbar-thin">
+                <table className="w-full min-w-[620px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
+                      <th className="py-2 pr-3">Day</th>
+                      <th className="py-2 pr-3">Site</th>
+                      <th className="py-2 pr-3">In</th>
+                      <th className="py-2 pr-3">Out</th>
+                      <th className="py-2 pr-3 text-right">Time</th>
+                      <th className="w-24 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.sessions.map(s => (
+                      <tr key={s.id} className="border-b border-border/70 last:border-0">
+                        <td className="py-2 pr-3 font-semibold whitespace-nowrap">
+                          {formatDay(s.start)}
+                          {s.editedAt != null && (
+                            <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground uppercase">Corrected</span>
+                          )}
+                          {data.overlaps.has(s.id) && (
+                            <span className="ml-2 rounded bg-warning-soft px-1.5 py-0.5 text-[10px] font-bold text-warning uppercase">Overlaps</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3">{sites.find(site => site.id === s.siteId)?.name ?? "—"}</td>
+                        <td className="py-2 pr-3 tabular-nums">{formatTime(s.start)}</td>
+                        <td className="py-2 pr-3 tabular-nums">
+                          {s.end == null ? (
+                            <span className="font-semibold text-success">On shift</span>
+                          ) : s.endReason === "timeout" ? (
+                            <span className="text-muted-foreground">~{formatTime(s.end)} · lost signal</span>
+                          ) : (
+                            formatTime(s.end)
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">{formatHours((s.end ?? now) - s.start)}</td>
+                        <td className="py-2 text-right">
+                          <Button variant="ghost" size="sm" className="rounded-lg" onClick={() => setEditingSessionId(s.id)}>
+                            <Pencil /> Edit
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No check-ins in the last 15 days.</p>
             )}
           </Panel>
         </StaggerItem>
@@ -287,8 +356,26 @@ export function CrewProfileView({ id }: { id: string }) {
         </StaggerItem>
       </Stagger>
 
+      <SessionEditDialog
+        session={data.sessions.find(s => s.id === editingSessionId) ?? null}
+        sites={sites}
+        personName={person.name}
+        now={now}
+        onClose={() => setEditingSessionId(null)}
+        onSave={async (changes, note) => {
+          const session = data.sessions.find(s => s.id === editingSessionId);
+          if (!session) return false;
+          const saved = await attempt("Editing check-in/out", () => updateSession(session.id, changes, session.endReason), {
+            targetType: "session",
+            targetId: session.id,
+            note,
+          });
+          if (saved) toast.success("Check-in corrected");
+          return saved != null;
+        }}
+      />
       <AssignSitesSheet key={assign.key} personId={assign.id} open={assign.open} onOpenChange={assign.setOpen} />
-      <Lightbox photos={data.photos.slice(0, 12)} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
+      <DeletableLightbox photos={data.photos.slice(0, 12)} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
     </>
   );
 }

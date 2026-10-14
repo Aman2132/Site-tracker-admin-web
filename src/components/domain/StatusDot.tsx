@@ -1,10 +1,11 @@
+import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import type { PresenceStatus } from "@/types/domain";
 
 export const STATUS_META: Record<PresenceStatus, { label: string; dot: string; chip: string }> = {
   online: { label: "Online", dot: "bg-success", chip: "bg-success-soft text-success" },
-  idle: { label: "Idle 1h+", dot: "bg-warning", chip: "bg-warning-soft text-warning" },
+  idle: { label: "Idle", dot: "bg-warning", chip: "bg-warning-soft text-warning" },
   offline: { label: "Offline", dot: "bg-stale", chip: "bg-stale-soft text-muted-foreground" },
   invited: { label: "Invited", dot: "bg-primary-bright", chip: "bg-accent text-accent-foreground" },
   deactivated: { label: "Deactivated", dot: "bg-danger", chip: "bg-danger-soft text-danger" },
@@ -21,7 +22,8 @@ export function StatusDot({ status, className }: { status: PresenceStatus; class
   );
 }
 
-export function StatusChip({ status, className }: { status: PresenceStatus; className?: string }) {
+/** Pass `since` (the last fix) to show how long someone has been idle: "Idle · 3h". */
+export function StatusChip({ status, since, className }: { status: PresenceStatus; since?: number; className?: string }) {
   return (
     <span
       className={cn(
@@ -32,6 +34,7 @@ export function StatusChip({ status, className }: { status: PresenceStatus; clas
     >
       <StatusDot status={status} className="size-1.5" />
       {STATUS_META[status].label}
+      {status === "idle" && since != null && ` · ${timeAgo(since).replace(" ago", "")}`}
     </span>
   );
 }
