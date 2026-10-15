@@ -268,3 +268,50 @@ test("byte and share formatting", () => {
   assert.equal(formatShare(0.634), "63%");
   assert.equal(share(2_000, 1_000), 1);
 });
+
+import { fullestAllowance } from "./usage.ts";
+
+test("the sidebar meter shows whichever allowance is closest to full", () => {
+  assert.equal(fullestAllowance(171_000, 659, 21_000_000).key, "files");
+  assert.equal(fullestAllowance(900 * 1024 ** 2, 659, 21_000_000).key, "firestore");
+  // Photo files not known yet: it can only choose between the other two.
+  assert.equal(fullestAllowance(171_000, 659, null).key, "firestore");
+  const full = fullestAllowance(0, 0, 1_500_000_000);
+  assert.deepEqual([full.key, full.fraction], ["files", 1]);
+});
+
+import { AGE_CHOICES, auditLine, chunk, confirmMatches, cutoffFor, findOrphans, sumBytes } from "./cleanup.ts";
+
+test("only files nothing points to, and old enough, are orphans", () => {
+  const now = 100 * HOUR;
+  const files = [
+    { path: "p1/a.jpg", size: 10, createdAt: now - 5 * HOUR },
+    { path: "p1/a_thumb.jpg", size: 2, createdAt: now - 5 * HOUR },
+    { path: "p1/lost.jpg", size: 7, createdAt: now - 5 * HOUR },
+    { path: "p1/uploading.jpg", size: 9, createdAt: now - 10 * MINUTE }, // an upload still being saved
+    { path: "p1/undated.jpg", size: 4 }, // age unknown: never touched
+  ];
+  const referenced = new Set(["p1/a.jpg", "p1/a_thumb.jpg"]);
+  const orphans = findOrphans(files, referenced, now);
+  assert.deepEqual(orphans.map(f => f.path), ["p1/lost.jpg"]);
+  assert.equal(sumBytes(orphans), 7);
+});
+
+test("cutoffs, chunking and the typed confirmation", () => {
+  assert.equal(cutoffFor(30, 100 * DAY), 70 * DAY);
+  assert.ok(AGE_CHOICES.every(d => d >= 30));
+  assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+  assert.deepEqual(chunk([], 3), []);
+  assert.equal(confirmMatches("DELETE"), true);
+  assert.equal(confirmMatches("  DELETE "), true);
+  assert.equal(confirmMatches("delete"), false);
+  assert.equal(confirmMatches(""), false);
+});
+
+test("the audit line says what, how old and how much", () => {
+  assert.equal(
+    auditLine({ kind: "photos", deleted: 142, failed: [], remaining: 0 }, 90, "38 MB"),
+    "Cleanup: deleted 142 old photos (older than 90 days) — 38 MB"
+  );
+  assert.equal(auditLine({ kind: "orphans", deleted: 3, failed: [], remaining: 0 }, null, null), "Cleanup: deleted 3 orphan files");
+});

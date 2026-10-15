@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { useAdmin, useAuth } from "@/components/auth/AuthProvider";
 import { PageHeader } from "@/components/domain/PageHeader";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
-import { StorageUsagePanel } from "@/components/domain/StorageUsagePanel";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -169,10 +168,6 @@ export function SettingsView() {
               <Bell className="size-3.5" /> Notifications are blocked for this site in your browser settings.
             </p>
           )}
-        </Section>
-
-        <Section title="Storage usage" description="How much of the free allowances this project uses.">
-          <StorageUsagePanel />
         </Section>
 
         <Section title="Theme">

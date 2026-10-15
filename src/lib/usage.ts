@@ -93,6 +93,30 @@ export function averageIsFresh(saved: { avgBytes: number; count: number } | unde
   return count <= saved.count * 2 && count >= saved.count / 2;
 }
 
+export interface Allowance {
+  key: "firestore" | "realtime" | "files";
+  label: string;
+  bytes: number;
+  limit: number;
+  /** 0–1. */
+  fraction: number;
+}
+
+/**
+ * The allowance closest to its limit, which is the one a glanceable meter
+ * should show. `photoFilesBytes` is null while that figure isn't known yet.
+ */
+export function fullestAllowance(firestoreBytes: number, realtimeBytes: number, photoFilesBytes: number | null): Allowance {
+  const all: Allowance[] = [
+    { key: "firestore", label: "Firestore", bytes: firestoreBytes, limit: LIMITS.firestoreBytes, fraction: share(firestoreBytes, LIMITS.firestoreBytes) },
+    { key: "realtime", label: "Live positions", bytes: realtimeBytes, limit: LIMITS.realtimeBytes, fraction: share(realtimeBytes, LIMITS.realtimeBytes) },
+  ];
+  if (photoFilesBytes != null) {
+    all.push({ key: "files", label: "Photo files", bytes: photoFilesBytes, limit: LIMITS.photoFilesBytes, fraction: share(photoFilesBytes, LIMITS.photoFilesBytes) });
+  }
+  return all.reduce((fullest, next) => (next.fraction > fullest.fraction ? next : fullest));
+}
+
 /** 0–1, capped, for a progress bar. */
 export const share = (bytes: number, limit: number) => (limit > 0 ? Math.min(1, bytes / limit) : 0);
 

@@ -223,16 +223,19 @@ export function useNow(): number {
  * Runs an admin action and reports a failure as a toast. Resolves with `{ value }`, or null when it failed.
  * Every successful action is also written to the superadmin-only audit trail (adminAudit), so all
  * admin edits are attributable without each action logging itself. Pass `audit` to say what was
- * touched and to attach the admin's note.
+ * touched and to attach the admin's note; as a function of the result it can also reword the line.
  */
 export async function attempt<T>(
   label: string,
   work: () => Promise<T>,
-  audit: AuditDetails = {}
+  audit: AuditDetails | ((value: T) => AuditDetails) = {}
 ): Promise<{ value: T } | null> {
   try {
     const value = await work();
-    void admin.logAdminAction(label, audit, actorName());
+    // A function lets the audit line describe the outcome (e.g. how many records a cleanup deleted).
+    const details = typeof audit === "function" ? audit(value) : audit;
+    const { label: relabel, ...rest } = details; // `label` is for the line only; the audit rules accept no extra keys
+    void admin.logAdminAction(relabel ?? label, rest, actorName());
     return { value };
   } catch (e) {
     console.warn(`[admin] ${label} failed —`, e);
@@ -242,6 +245,8 @@ export async function attempt<T>(
 }
 
 export interface AuditDetails {
+  /** Replaces the action's label in the audit line (used when the outcome is only known afterwards). */
+  label?: string;
   targetType?: string;
   targetId?: string;
   note?: string;

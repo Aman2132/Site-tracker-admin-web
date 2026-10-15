@@ -1,6 +1,5 @@
-import { filesOf, storagePathFromUrl } from "@/lib/photoFiles";
-import { bearer, firestoreUrl, HttpError, requireOwner } from "@/lib/serverAuth";
-import { deleteFiles } from "@/lib/storage";
+import { deletePhotoCompletely } from "@/lib/photoServer";
+import { HttpError, requireOwner } from "@/lib/serverAuth";
 
 /**
  * 🚨 Deletes photos completely: the original file, its thumbnail AND the
@@ -14,11 +13,6 @@ import { deleteFiles } from "@/lib/storage";
  */
 const MAX_PER_REQUEST = 200;
 const VALID_ID = /^[A-Za-z0-9]{1,64}$/;
-
-interface PhotoFields {
-  uri?: { stringValue?: string };
-  thumbUrl?: { stringValue?: string };
-}
 
 export async function POST(request: Request) {
   try {
@@ -45,29 +39,7 @@ export async function POST(request: Request) {
     const failed: { id: string; reason: string }[] = [];
     for (const id of ids) {
       try {
-        const record = await fetch(firestoreUrl(`photos/${id}`), { headers: bearer(idToken), cache: "no-store" });
-        if (record.status === 404) {
-          deleted.push(id); // already gone
-          continue;
-        }
-        if (!record.ok) throw new Error(`Couldn't read the photo record (${record.status}).`);
-
-        const fields = ((await record.json()) as { fields?: PhotoFields }).fields ?? {};
-        const fullUrl = fields.uri?.stringValue ?? "";
-        const thumbUrl = fields.thumbUrl?.stringValue ?? fullUrl;
-        // A record whose file we can't locate is left alone: deleting just the record would orphan the file.
-        if (storagePathFromUrl(fullUrl) === null) {
-          throw new Error("This photo's file isn't in the known photo storage, so it was left alone.");
-        }
-
-        await deleteFiles(filesOf({ fullUrl, thumbUrl }), serviceKey);
-
-        const removal = await fetch(firestoreUrl(`photos/${id}`), { method: "DELETE", headers: bearer(idToken) });
-        if (!removal.ok) {
-          throw new Error(
-            `The files were removed but the record couldn't be (${removal.status}). Delete it again once the rules allow it.`
-          );
-        }
+        await deletePhotoCompletely(id, idToken, serviceKey);
         deleted.push(id);
       } catch (error) {
         failed.push({ id, reason: error instanceof Error ? error.message : "Unknown error" });

@@ -13,6 +13,7 @@ import { useLiveStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 import { isActive, navItemsFor } from "./nav";
+import { StorageMeter } from "./StorageMeter";
 
 export const SIDEBAR_WIDTH = { open: 264, closed: 76 };
 
@@ -160,6 +161,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       </div>
       <div className={cn("space-y-3 p-4", collapsed && "px-3")}>
         <LiveCrewCard collapsed={collapsed} />
+        <StorageMeter collapsed={collapsed} />
         <button
           type="button"
           onClick={onToggle}

@@ -1,3 +1,4 @@
+import type { BucketFile } from "./cleanup";
 import { PHOTOS_BUCKET } from "./photoFiles";
 
 /**
@@ -46,17 +47,17 @@ interface ListedObject {
   name: string;
   /** Folders come back with no id and no metadata. */
   id: string | null;
+  created_at?: string | null;
   metadata?: { size?: number } | null;
 }
 
 const LIST_PAGE = 1000;
 
 /**
- * Exact size of everything in the photos bucket (originals and thumbnails),
- * summed from the file store's own metadata. Walks one folder level per person
- * (`<personId>/<file>`), paging 1000 at a time.
+ * Every file in the photos bucket with its size and creation time, found by
+ * walking one folder level per person (`<personId>/<file>`), 1000 at a time.
  */
-export async function bucketUsage(serviceKey: string): Promise<BucketUsage> {
+export async function listBucketFiles(serviceKey: string): Promise<BucketFile[]> {
   const list = async (prefix: string, offset: number): Promise<ListedObject[]> => {
     const response = await fetch(`${SUPABASE_URL}/storage/v1/object/list/${PHOTOS_BUCKET}`, {
       method: "POST",
@@ -68,20 +69,27 @@ export async function bucketUsage(serviceKey: string): Promise<BucketUsage> {
     return (await response.json()) as ListedObject[];
   };
 
-  const total: BucketUsage = { files: 0, bytes: 0 };
+  const files: BucketFile[] = [];
   const walk = async (prefix: string) => {
     for (let offset = 0; ; offset += LIST_PAGE) {
       const page = await list(prefix, offset);
       for (const item of page) {
-        if (item.id === null) await walk(prefix ? `${prefix}/${item.name}` : item.name);
+        const path = prefix ? `${prefix}/${item.name}` : item.name;
+        if (item.id === null) await walk(path);
         else {
-          total.files += 1;
-          total.bytes += item.metadata?.size ?? 0;
+          const created = item.created_at ? Date.parse(item.created_at) : NaN;
+          files.push({ path, size: item.metadata?.size ?? 0, ...(Number.isNaN(created) ? {} : { createdAt: created }) });
         }
       }
       if (page.length < LIST_PAGE) return;
     }
   };
   await walk("");
-  return total;
+  return files;
+}
+
+/** Exact size of everything in the photos bucket (originals and thumbnails). */
+export async function bucketUsage(serviceKey: string): Promise<BucketUsage> {
+  const files = await listBucketFiles(serviceKey);
+  return { files: files.length, bytes: files.reduce((sum, file) => sum + file.size, 0) };
 }

@@ -1,11 +1,10 @@
 "use client";
 
 import { Loader2, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { formatBytes, formatLimit, formatShare, LIMITS, share } from "@/lib/usage";
-import { loadFirebaseUsage, loadPhotoFilesUsage, type FirebaseUsage, type PhotoFilesUsage } from "@/lib/usageSnapshot";
+import { useStorageUsage } from "@/lib/useStorageUsage";
 import { cn } from "@/lib/utils";
 
 /** Bar colour by how full it is: calm, then a warning, then danger. */
@@ -38,47 +37,16 @@ function Meter({ label, detail, bytes, limit, note }: { label: string; detail: s
   );
 }
 
-const read = () => Promise.allSettled([loadFirebaseUsage(), loadPhotoFilesUsage()]);
+/** Opening the page re-reads if the shared numbers are over 5 minutes old (the sidebar keeps them within the hour). */
+const PAGE_MAX_AGE_MS = 5 * 60 * 1000;
 
 /**
  * How much of the free allowances the project uses: Firestore documents and the
  * live-position database (estimated, because Firebase doesn't expose exact
  * stored size to an app), and the photo files (exact, from the file store).
- * Reads happen only on opening this card and on Refresh.
  */
 export function StorageUsagePanel() {
-  const [firebaseUsage, setFirebaseUsage] = useState<FirebaseUsage | null>(null);
-  const [files, setFiles] = useState<PhotoFilesUsage | null>(null);
-  const [filesError, setFilesError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(true);
-  const [at, setAt] = useState<number | null>(null);
-
-  const apply = useCallback((fb: PromiseSettledResult<FirebaseUsage>, ph: PromiseSettledResult<PhotoFilesUsage>) => {
-    if (fb.status === "fulfilled") {
-      setFirebaseUsage(fb.value);
-      setError(null);
-    } else setError(fb.reason instanceof Error ? fb.reason.message : "Couldn't read Firebase usage.");
-    if (ph.status === "fulfilled") {
-      setFiles(ph.value);
-      setFilesError(null);
-    } else setFilesError(ph.reason instanceof Error ? ph.reason.message : "Couldn't read photo storage.");
-    setAt(Date.now());
-    setBusy(false);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void read().then(([fb, ph]) => !cancelled && apply(fb, ph));
-    return () => {
-      cancelled = true;
-    };
-  }, [apply]);
-
-  const refresh = () => {
-    setBusy(true);
-    void read().then(([fb, ph]) => apply(fb, ph));
-  };
+  const { firebaseUsage, files, filesError, error, busy, at, refresh } = useStorageUsage(PAGE_MAX_AGE_MS);
 
   const visible = firebaseUsage?.collections.filter(c => !c.unavailable) ?? [];
   const biggest = [...visible].sort((a, b) => b.bytes - a.bytes).slice(0, 5);
@@ -87,9 +55,9 @@ export function StorageUsagePanel() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
-          Free-plan allowances. {at ? `Checked ${new Date(at).toLocaleTimeString()}.` : "Checking…"}
+          Free-plan allowances. {at ? `Checked ${new Date(at).toLocaleTimeString()}.` : busy ? "Checking…" : ""}
         </p>
-        <Button variant="outline" size="sm" className="rounded-lg" onClick={refresh} disabled={busy}>
+        <Button variant="outline" size="sm" className="rounded-lg" onClick={() => void refresh()} disabled={busy}>
           {busy ? <Loader2 className="animate-spin" /> : <RefreshCw />} Refresh
         </Button>
       </div>
