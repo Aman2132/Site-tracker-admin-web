@@ -7,7 +7,7 @@ import { DAY } from "./time.ts";
  * orphan, and what the confirmation requires.
  */
 
-export type CleanupKind = "photos" | "orphans" | "events" | "sessions" | "inventory";
+export type CleanupKind = "photos" | "orphans" | "events" | "sessions" | "inventory" | "views";
 
 /** Age choices offered for the kinds that use one. */
 export const AGE_CHOICES = [30, 90, 180, 365];
@@ -60,6 +60,13 @@ export const KIND_INFO: Record<CleanupKind, KindInfo> = {
     title: "Old check-ins",
     removes: "Check-in and check-out records older than the chosen age.",
     loses: "Attendance and hours worked for those dates disappear from Attendance, Overview and crew profiles. This cannot be undone.",
+    usesAge: true,
+    frees: "Firestore",
+  },
+  views: {
+    title: "Old page views",
+    removes: "Entries in the page-view log (pages opened, links followed) older than the chosen age. The audit log itself is never deleted.",
+    loses: "The page-visit history for those dates. Changes, sign-ins, failures and exports stay in the audit log. This cannot be undone.",
     usesAge: true,
     frees: "Firestore",
   },

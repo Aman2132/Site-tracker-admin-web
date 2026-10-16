@@ -1,5 +1,6 @@
 "use client";
 
+import { describeFields } from "@/lib/auditLog";
 import { AlarmClock, Building2, CalendarRange, Download, Timer, TriangleAlert, UserCheck, WifiOff } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
@@ -24,7 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatDay, formatDayMonth, formatHours, formatTime, formatWeekday } from "@/lib/format";
 import { MIN_SHIFT_MS, attendanceFor, lastNDays, type AttendanceCell } from "@/lib/insights";
 import { HOUR, dayStart } from "@/lib/time";
-import { useLiveStore, useLookups, useNow } from "@/lib/store";
+import { logAction, useLiveStore, useLookups, useNow } from "@/lib/store";
 import { defaultSiteAmong } from "@/lib/prefs";
 import { cn } from "@/lib/utils";
 
@@ -152,6 +153,7 @@ export function AttendanceView() {
     a.download = "attendance.csv";
     a.click();
     URL.revokeObjectURL(url);
+    logAction("Exported attendance CSV", { kind: "export", changes: describeFields([{ label: "people", value: rows.length }, { label: "days", value: days.length }]) });
     toast.success("Timesheet exported", { description: `${rows.length} people × ${days.length} days · attendance.csv` });
   };
 

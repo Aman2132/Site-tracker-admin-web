@@ -1,5 +1,6 @@
 "use client";
 
+import { describeFields } from "@/lib/auditLog";
 import { Building2, Check, Loader2, Sparkles } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
@@ -44,6 +45,12 @@ export function CreateSiteDialog({ open, onOpenChange }: { open: boolean; onOpen
     const result = await attempt("Creating the site", () => createSite({ ...form, name: form.name.trim(), manager: form.manager.trim() }), {
       targetType: "site",
       note: form.name.trim(),
+      changes: describeFields([
+        { label: "name", value: form.name.trim() },
+        { label: "status", value: form.status },
+        { label: "manager", value: form.manager.trim() },
+        { label: "crew assigned", value: form.crewIds.length },
+      ]),
     });
     setBusy(false);
     if (!result) return;

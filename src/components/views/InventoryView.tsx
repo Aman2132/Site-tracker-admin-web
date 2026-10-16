@@ -1,5 +1,6 @@
 "use client";
 
+import { describeChanges, describeFields } from "@/lib/auditLog";
 import { Building2, Camera, ChevronRight, Download, MoreHorizontal, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -25,7 +26,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { firebase } from "@/lib/firebase";
 import { formatDateTime, formatDay, plural } from "@/lib/format";
 import { formatPack, formatQuantity, isUsedUp, itemKey, remaining, toCsv, totalsByItem } from "@/lib/inventory";
-import { attempt, useLiveStore, useLookups, useNow } from "@/lib/store";
+import { attempt, logAction, useLiveStore, useLookups, useNow } from "@/lib/store";
 import { defaultSiteAmong } from "@/lib/prefs";
 import { DAY, dayStart } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -187,7 +188,25 @@ export function InventoryView() {
     const outcome = await attempt(
       label,
       () => (target ? updateInventoryEntry(target.id, changes) : addInventoryEntry(changes, myName)),
-      { targetType: "inventory", targetId: target?.id, note: reason }
+      {
+        targetType: "inventory",
+        targetId: target?.id,
+        note: reason,
+        changes: target
+          ? describeChanges([
+              { label: "item", before: target.name, after: changes.name.trim() },
+              { label: "quantity", before: target.quantity, after: changes.quantity },
+              { label: "unit", before: target.unit, after: changes.unit.trim() },
+              { label: "used", before: target.usedQuantity, after: changes.usedQuantity ?? target.usedQuantity },
+              { label: "site", before: siteName(target.siteId), after: siteName(changes.siteId) },
+              { label: "note", before: target.note, after: changes.note?.trim() },
+            ])
+          : describeFields([
+              { label: "item", value: changes.name.trim() },
+              { label: "quantity", value: `${changes.quantity} ${changes.unit.trim()}` },
+              { label: "site", value: siteName(changes.siteId) },
+            ]),
+      }
     );
     if (outcome) toast.success(target ? "Entry corrected" : "Item added");
     return outcome != null;
@@ -199,7 +218,18 @@ export function InventoryView() {
     const outcome = await attempt(
       `Deleted inventory "${deleting.name}" ${formatQuantity(deleting.quantity)} ${deleting.unit} at ${siteName(deleting.siteId)} (logged by ${deleting.personName || "crew"})`,
       () => deleteInventoryEntry(deleting.id),
-      { targetType: "inventory", targetId: deleting.id }
+      {
+        targetType: "inventory",
+        targetId: deleting.id,
+        changes: describeFields([
+          { label: "deleted item", value: deleting.name },
+          { label: "quantity", value: `${deleting.quantity} ${deleting.unit}` },
+          { label: "used", value: deleting.usedQuantity },
+          { label: "site", value: siteName(deleting.siteId) },
+          { label: "logged by", value: deleting.personName },
+          { label: "received", value: formatDateTime(deleting.receivedAt) },
+        ]),
+      }
     );
     setBusy(false);
     if (outcome) toast.success("Entry deleted");
@@ -219,6 +249,15 @@ export function InventoryView() {
       e.note ?? "",
       e.editedAt ? `Corrected ${formatDateTime(e.editedAt)}` : "",
     ]);
+    logAction("Exported inventory CSV", {
+      kind: "export",
+      changes: describeFields([
+        { label: "rows", value: rows.length },
+        { label: "site", value: site === "all" ? "all sites" : siteName(site) },
+        { label: "range", value: range },
+        { label: "search", value: query.trim() },
+      ]),
+    });
     download(
       `inventory-${new Date(now).toISOString().slice(0, 10)}.csv`,
       toCsv(["Received", "Site", "Item", "Quantity", "Unit", "Used", "Left", "Logged by", "Note", "Edited"], rows)

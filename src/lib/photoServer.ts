@@ -13,6 +13,7 @@ import { deleteFiles } from "./storage";
  */
 
 interface PhotoFields {
+  personId?: { stringValue?: string };
   uri?: { stringValue?: string };
   thumbUrl?: { stringValue?: string };
   takenAt?: { integerValue?: string; doubleValue?: number };
@@ -20,6 +21,7 @@ interface PhotoFields {
 
 export interface PhotoRef {
   id: string;
+  personId: string;
   fullUrl: string;
   thumbUrl: string;
   takenAt: number;
@@ -29,6 +31,7 @@ const toRef = (id: string, fields: PhotoFields): PhotoRef => {
   const fullUrl = fields.uri?.stringValue ?? "";
   return {
     id,
+    personId: fields.personId?.stringValue ?? "",
     fullUrl,
     thumbUrl: fields.thumbUrl?.stringValue ?? fullUrl,
     takenAt: Number(fields.takenAt?.integerValue ?? fields.takenAt?.doubleValue ?? 0),
@@ -42,7 +45,7 @@ const toRef = (id: string, fields: PhotoFields): PhotoRef => {
 export async function queryPhotoRecords(idToken: string, opts: { before?: number; limit: number }): Promise<PhotoRef[]> {
   const structuredQuery = {
     from: [{ collectionId: "photos" }],
-    select: { fields: [{ fieldPath: "uri" }, { fieldPath: "thumbUrl" }, { fieldPath: "takenAt" }] },
+    select: { fields: [{ fieldPath: "personId" }, { fieldPath: "uri" }, { fieldPath: "thumbUrl" }, { fieldPath: "takenAt" }] },
     ...(opts.before != null
       ? { where: { fieldFilter: { field: { fieldPath: "takenAt" }, op: "LESS_THAN", value: { integerValue: String(Math.floor(opts.before)) } } } }
       : {}),
@@ -68,7 +71,28 @@ export const referencedPaths = (records: PhotoRef[]): Set<string> =>
   new Set(records.flatMap(record => filesOf({ fullUrl: record.fullUrl, thumbUrl: record.thumbUrl })));
 
 /**
- * Deletes one photo completely. Safe to run again after a failure: an
+ * Leaves a small "this photo was deleted" note (deletedPhotos/{id}) so the crew
+ * app can remove its own copy: it finds the photo by who took it and when.
+ * Written with PATCH, so running it again just rewrites the same note.
+ */
+async function writeTombstone(ref: PhotoRef, idToken: string): Promise<void> {
+  if (!ref.personId) return; // nothing to match a phone's copy against
+  const response = await fetch(firestoreUrl(`deletedPhotos/${ref.id}`), {
+    method: "PATCH",
+    headers: { ...bearer(idToken), "content-type": "application/json" },
+    body: JSON.stringify({
+      fields: {
+        personId: { stringValue: ref.personId },
+        takenAt: { integerValue: String(Math.floor(ref.takenAt)) },
+        deletedAt: { integerValue: String(Date.now()) },
+      },
+    }),
+  });
+  if (!response.ok) throw new Error(`Couldn't record the deletion for the crew app (${response.status}).`);
+}
+
+/**
+ * Deletes one photo completely (files, then a deletion note for the crew app, then the record). Safe to run again after a failure: an
  * already-missing file or record counts as gone. A record whose file isn't in
  * our store is left alone (deleting only the record would orphan the file).
  */
@@ -83,6 +107,8 @@ export async function deletePhotoCompletely(id: string, idToken: string, service
   }
 
   await deleteFiles(filesOf(ref), serviceKey);
+  // Before the record goes: if this fails the record stays, so a retry finds it again.
+  await writeTombstone(ref, idToken);
 
   const removal = await fetch(firestoreUrl(`photos/${id}`), { method: "DELETE", headers: bearer(idToken) });
   if (!removal.ok) {

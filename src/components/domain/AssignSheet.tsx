@@ -1,5 +1,6 @@
 "use client";
 
+import { describeChanges, describeFields } from "@/lib/auditLog";
 import { Building2, Search } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -28,7 +29,9 @@ export function AssignSitesSheet({
 
   const save = async () => {
     if (!person) return;
-    if (!(await attempt("Updating sites", () => setPersonSites(person.id, selected), { targetType: "person", targetId: person.id }))) return;
+    const names = (ids: string[]) => ids.map(id => sites.find(s => s.id === id)?.name ?? "removed site");
+    const changes = describeChanges([{ label: "sites", before: names(person.siteIds), after: names(selected) }]);
+    if (!(await attempt("Updating sites", () => setPersonSites(person.id, selected), { targetType: "person", targetId: person.id, changes }))) return;
     toast.success(`Sites updated for ${person.name}`, { description: `${selected.length} site${selected.length === 1 ? "" : "s"} assigned.` });
     onOpenChange(false);
   };
@@ -112,7 +115,12 @@ export function AssignCrewSheet({
     const before = assignable.filter(c => c.siteIds.includes(site.id)).map(c => c.id);
     const added = selected.filter(id => !before.includes(id));
     const removed = before.filter(id => !selected.includes(id));
-    if (!(await attempt("Updating crew", () => setSiteCrew(site.id, added, removed), { targetType: "site", targetId: site.id }))) return;
+    const who = (ids: string[]) => ids.map(id => assignable.find(c => c.id === id)?.name ?? "someone");
+    const changes = describeFields([
+      { label: "added", value: who(added) },
+      { label: "removed", value: who(removed) },
+    ]);
+    if (!(await attempt("Updating crew", () => setSiteCrew(site.id, added, removed), { targetType: "site", targetId: site.id, changes }))) return;
     toast.success(`Crew updated for ${site.name}`, { description: `${selected.length} people assigned.` });
     onOpenChange(false);
   };

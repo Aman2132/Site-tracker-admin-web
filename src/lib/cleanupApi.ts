@@ -9,7 +9,8 @@ import { firebase } from "./firebase";
  * file-store key. Every path ends by looking again, so `remaining` is what is
  * really still there.
  */
-const isFirestoreKind = (kind: CleanupKind): kind is FirestoreKind => kind === "events" || kind === "sessions" || kind === "inventory";
+const isFirestoreKind = (kind: CleanupKind): kind is FirestoreKind =>
+  kind === "events" || kind === "sessions" || kind === "inventory" || kind === "views";
 
 /** Photos go 100 per request; this many requests is 6,000 photos, then it stops rather than loop. */
 const MAX_SERVER_ROUNDS = 60;

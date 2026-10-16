@@ -9,6 +9,7 @@ import { LiveStoreProvider } from "@/lib/store";
 
 import { DialogsProvider } from "./DialogsProvider";
 import { LiveGate } from "./LiveGate";
+import { PageActivityLogger } from "./PageActivityLogger";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
@@ -49,6 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <AuthGate>
           <LiveStoreProvider>
             <DialogsProvider>
+              <PageActivityLogger />
               <div className="flex min-h-dvh">
                 <Sidebar collapsed={collapsed} onToggle={toggle} />
                 <div className="flex min-w-0 flex-1 flex-col">

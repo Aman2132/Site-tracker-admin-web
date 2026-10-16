@@ -13,6 +13,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { describePhoto } from "@/lib/auditText";
+import { logAction } from "@/lib/store";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
@@ -301,6 +303,7 @@ function MetaPanel({
             href={photo.fullUrl}
             target="_blank"
             rel="noreferrer"
+            onClick={() => logAction("Opened original photo", { kind: "export", targetType: "photo", targetId: photo.id, changes: describePhoto(photo) })}
             className={cn(buttonVariants({ size: "lg" }), "w-full rounded-xl")}
           >
             <Download /> Open original ({photo.width}×{photo.height})

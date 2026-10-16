@@ -18,12 +18,37 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDateTime, formatDay, formatTime, plural } from "@/lib/format";
-import { AUDIT_LIMIT, useAdminAudit, useLiveStore, useLookups, useNow } from "@/lib/store";
+import { AUDIT_LIMIT, VIEWS_LIMIT, useAdminAudit, useAdminViews, useLiveStore, useLookups, useNow } from "@/lib/store";
 import { DAY, TZ_LABEL, dayStart } from "@/lib/time";
 
 import type { AuditEntry } from "@/types/domain";
 
 const PAGE_SIZE = 50;
+
+type Tab = "all" | "change" | "auth" | "failed" | "export" | "views";
+
+/** One line of the log, whether it came from the audit log or the page log. */
+interface Row {
+  id: string;
+  at: number;
+  actorId: string;
+  actorName: string;
+  action: string;
+  kind: "change" | "auth" | "failed" | "export" | "view" | "external";
+  entry?: AuditEntry;
+  path?: string;
+  changes?: string;
+  reason?: string;
+  note?: string;
+}
+
+const KIND_BADGE: Partial<Record<Row["kind"], { label: string; className: string }>> = {
+  auth: { label: "Sign-in", className: "bg-accent text-accent-foreground" },
+  failed: { label: "Failed", className: "bg-danger-soft text-danger" },
+  export: { label: "Export", className: "bg-warning-soft text-warning" },
+  view: { label: "Page", className: "bg-muted text-muted-foreground" },
+  external: { label: "Left dashboard", className: "bg-muted text-muted-foreground" },
+};
 
 type Range = "today" | "7d" | "30d" | "all";
 const RANGE_DAYS: Record<Range, number | null> = { today: 1, "7d": 7, "30d": 30, all: null };
@@ -59,6 +84,8 @@ export function AuditLogView() {
 
 function AuditLog() {
   const { entries, error } = useAdminAudit();
+  const [tab, setTab] = useState<Tab>("all");
+  const views = useAdminViews(tab === "views");
   const { sessions, inventory } = useLiveStore();
   const { personById, siteById } = useLookups();
   const now = useNow();
@@ -101,29 +128,97 @@ function AuditLog() {
 
   const actors = useMemo(() => {
     const names = new Map<string, string>();
-    for (const e of entries ?? []) if (!names.has(e.actorId)) names.set(e.actorId, e.actorName || e.actorId.slice(0, 8));
+    for (const e of [...(entries ?? []), ...(views.entries ?? [])]) if (!names.has(e.actorId)) names.set(e.actorId, e.actorName || e.actorId.slice(0, 8));
     return [...names].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [entries]);
+  }, [entries, views.entries]);
+
+  /** A page path as a name a person can read: "Crew profile: Ram" rather than /crew/abc123. */
+  const pageTarget = (path: string): { name: string; href?: string } => {
+    const crewId = path.match(/^\/crew\/([^/]+)/)?.[1];
+    if (crewId) return { name: `Crew profile: ${personById.get(crewId)?.name ?? "removed person"}`, href: personById.has(crewId) ? path : undefined };
+    const siteId = path.match(/^\/sites\/([^/]+)/)?.[1];
+    if (siteId) return { name: `Site: ${siteById.get(siteId)?.name ?? "removed site"}`, href: siteById.has(siteId) ? path : undefined };
+    return path.startsWith("/") ? { name: path, href: path } : { name: path };
+  };
+
+  const all: Row[] = useMemo(() => {
+    if (tab === "views") {
+      return (views.entries ?? []).map(v => ({
+        id: v.id,
+        at: v.at,
+        actorId: v.actorId,
+        actorName: v.actorName,
+        action: v.kind === "external" ? "Left the dashboard" : `Opened ${v.title}`,
+        kind: v.kind,
+        path: v.path,
+      }));
+    }
+    return (entries ?? []).map(e => ({
+      id: e.id,
+      at: e.at,
+      actorId: e.actorId,
+      actorName: e.actorName,
+      action: e.action,
+      kind: e.kind ?? "change",
+      entry: e,
+      changes: e.changes,
+      reason: e.reason,
+      note: e.note,
+    }));
+  }, [tab, entries, views.entries]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const days = RANGE_DAYS[range];
     const from = days == null ? 0 : dayStart(now) - (days - 1) * DAY;
-    return (entries ?? []).filter(
-      e =>
-        e.at >= from &&
-        (actor === "all" || e.actorId === actor) &&
-        (!q || [e.actorName, pastTense(e.action), e.note ?? "", target(e).name].some(text => text.toLowerCase().includes(q)))
+    return all.filter(
+      r =>
+        r.at >= from &&
+        (tab === "all" || tab === "views" || r.kind === tab) &&
+        (actor === "all" || r.actorId === actor) &&
+        (!q ||
+          [r.actorName, pastTense(r.action), r.note ?? "", r.changes ?? "", r.reason ?? "", r.entry ? target(r.entry).name : r.path ? pageTarget(r.path).name : ""].some(text =>
+            text.toLowerCase().includes(q)
+          ))
     );
-  }, [entries, actor, query, range, now, target]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pageTarget only reads the lookups already listed
+  }, [all, tab, actor, query, range, now, target, personById, siteById]);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: entries?.length ?? 0 };
+    for (const e of entries ?? []) c[e.kind ?? "change"] = (c[e.kind ?? "change"] ?? 0) + 1;
+    return c;
+  }, [entries]);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const current = Math.min(page, pages - 1);
   const shown = rows.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
-  const atLimit = (entries?.length ?? 0) >= AUDIT_LIMIT;
+  const feed = tab === "views" ? views : { entries, error };
+  const atLimit = tab === "views" ? (views.entries?.length ?? 0) >= VIEWS_LIMIT : (entries?.length ?? 0) >= AUDIT_LIMIT;
 
   return (
     <>
-      <PageHeader title="Audit log" description={`Every edit made by an admin, newest first. Times in ${TZ_LABEL}.`} />
+      <PageHeader
+        title="Audit log"
+        description={`Everything admins do: changes (with before → after), sign-ins, failed attempts, exports and every page opened. Newest first. Times in ${TZ_LABEL}.`}
+      />
+
+      <div className="mb-3 overflow-x-auto scrollbar-thin">
+        <SegmentedControl<Tab>
+          value={tab}
+          onChange={v => {
+            setTab(v);
+            setPage(0);
+          }}
+          options={[
+            { value: "all", label: "All", count: counts.all },
+            { value: "change", label: "Changes", count: counts.change ?? 0 },
+            { value: "auth", label: "Sign-ins", count: counts.auth ?? 0 },
+            { value: "failed", label: "Failed", count: counts.failed ?? 0 },
+            { value: "export", label: "Exports", count: counts.export ?? 0 },
+            { value: "views", label: "Page views" },
+          ]}
+        />
+      </div>
 
       <div className="surface mb-5 flex flex-col gap-3 rounded-2xl p-3 md:flex-row md:items-center">
         <div className="relative min-w-52 flex-1 md:max-w-80">
@@ -175,9 +270,9 @@ function AuditLog() {
         </DropdownMenu>
       </div>
 
-      {error ? (
-        <EmptyState icon={<ScrollText className="size-6" />} title="Couldn't load the audit log" description={error} />
-      ) : entries == null ? (
+      {feed.error ? (
+        <EmptyState icon={<ScrollText className="size-6" />} title="Couldn't load the audit log" description={feed.error} />
+      ) : feed.entries == null ? (
         <div className="flex justify-center py-14 text-muted-foreground">
           <Loader2 className="size-6 animate-spin" />
         </div>
@@ -188,7 +283,7 @@ function AuditLog() {
         {atLimit && (
           <div className="mb-3 flex items-start gap-2 rounded-xl bg-accent px-3 py-2.5 text-sm text-accent-foreground">
             <Info className="mt-0.5 size-4 shrink-0" />
-            Only the newest {AUDIT_LIMIT} admin actions are loaded. Anything older isn&apos;t shown here.
+            Only the newest {tab === "views" ? VIEWS_LIMIT : AUDIT_LIMIT} {tab === "views" ? "page views" : "admin actions"} are loaded. Anything older isn&apos;t shown here.{tab === "views" ? " Old page views can be cleared in Storage → Clean up." : ""}
           </div>
         )}
         <div className="surface overflow-hidden rounded-2xl">
@@ -199,18 +294,22 @@ function AuditLog() {
                   <th className="px-5 py-3.5">Time</th>
                   <th className="px-3 py-3.5">Admin</th>
                   <th className="px-3 py-3.5">Action</th>
-                  <th className="px-3 py-3.5">Target</th>
-                  <th className="px-5 py-3.5">Note</th>
+                  <th className="px-3 py-3.5">{tab === "views" ? "Page" : "Target"}</th>
+                  <th className="px-5 py-3.5">Details</th>
                 </tr>
               </thead>
               <tbody>
                 {shown.map(e => {
-                  const t = target(e);
+                  const t = e.entry ? target(e.entry) : e.path ? pageTarget(e.path) : { name: "" };
+                  const badge = KIND_BADGE[e.kind];
                   return (
                     <tr key={e.id} className="border-b border-border/70 align-top last:border-0">
                       <td className="px-5 py-3 whitespace-nowrap tabular-nums text-muted-foreground">{formatDateTime(e.at)}</td>
                       <td className="px-3 py-3 font-bold">{e.actorName || "Unknown admin"}</td>
-                      <td className="px-3 py-3">{pastTense(e.action)}</td>
+                      <td className="min-w-44 px-3 py-3">
+                        {badge && <span className={`mr-2 inline-flex rounded px-1.5 text-[11px] font-semibold ${badge.className}`}>{badge.label}</span>}
+                        {e.kind === "failed" ? e.action : pastTense(e.action)}
+                      </td>
                       <td className="px-3 py-3">
                         {t.href ? (
                           <Link href={t.href} className="font-medium text-primary hover:underline">
@@ -220,7 +319,11 @@ function AuditLog() {
                           <span className="text-muted-foreground">{t.name}</span>
                         )}
                       </td>
-                      <td className="max-w-80 px-5 py-3 break-words text-muted-foreground">{e.note}</td>
+                      <td className="max-w-96 space-y-1 px-5 py-3 break-words text-muted-foreground">
+                        {e.reason && <div className="font-medium text-danger">{e.reason}</div>}
+                        {e.changes && <div className="font-mono text-xs text-foreground">{e.changes}</div>}
+                        {e.note && <div>Note: {e.note}</div>}
+                      </td>
                     </tr>
                   );
                 })}

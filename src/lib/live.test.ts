@@ -315,3 +315,71 @@ test("the audit line says what, how old and how much", () => {
   );
   assert.equal(auditLine({ kind: "orphans", deleted: 3, failed: [], remaining: 0 }, null, null), "Cleanup: deleted 3 orphan files");
 });
+
+import { createViewGate, describeChanges, describeFields, externalTarget, failureReason, listNames, pageTitle, wasRefused } from "./auditLog.ts";
+
+test("only the fields that really changed are described, as before → after", () => {
+  assert.equal(
+    describeChanges([
+      { label: "name", before: "Alpha", after: "Alpha 2" },
+      { label: "status", before: "planning", after: "planning" },
+      { label: "active", before: true, after: false },
+      { label: "sites", before: ["A"], after: ["A", "B"] },
+      { label: "manager", before: "", after: "Ram" },
+    ]),
+    'name: "Alpha" → "Alpha 2"; active: yes → no; sites: "A" → "A", "B"; manager: — → "Ram"'
+  );
+  assert.equal(describeChanges([{ label: "x", before: 1, after: 1 }]), undefined);
+  assert.ok((describeChanges([{ label: "x", before: "a", after: "b".repeat(5000) }]) ?? "").length <= 1000);
+});
+
+test("created and deleted records are described by what they held", () => {
+  assert.equal(describeFields([{ label: "item", value: "Cement" }, { label: "note", value: "" }, { label: "qty", value: 40 }]), 'item: "Cement"; qty: 40');
+  assert.equal(describeFields([{ label: "a", value: undefined }]), undefined);
+  assert.equal(listNames(["a", "b"]), "a, b");
+  assert.equal(listNames(["a", "b", "c", "d", "e", "f", "g"]), "a, b, c, d, e and 2 more");
+});
+
+test("failures are worded and told apart from refusals", () => {
+  assert.equal(failureReason(new Error("Network down")), "Network down");
+  assert.equal(failureReason("odd"), "Something went wrong.");
+  assert.equal(wasRefused({ code: "permission-denied", message: "x" }), true);
+  assert.equal(wasRefused(new Error("Only the superadmin can run a cleanup.")), true);
+  assert.equal(wasRefused(new Error("Cleanup failed (403).")), true);
+  assert.equal(wasRefused(new Error("Network down")), false);
+});
+
+test("page titles and outbound links", () => {
+  assert.equal(pageTitle("/"), "Overview");
+  assert.equal(pageTitle("/crew/abc123"), "Crew profile");
+  assert.equal(pageTitle("/crew"), "Crew");
+  assert.equal(pageTitle("/storage"), "Storage");
+  assert.equal(pageTitle("/something-else"), "/something-else");
+  assert.equal(externalTarget("https://maps.google.com/?q=1,2&token=x", "http://localhost:3000"), "maps.google.com/");
+  assert.equal(externalTarget("/photos", "http://localhost:3000"), null);
+  assert.equal(externalTarget("http://localhost:3000/crew", "http://localhost:3000"), null);
+  assert.equal(externalTarget("mailto:a@b.c", "http://localhost:3000"), null);
+});
+
+test("the page-view gate drops quick repeats and caps the hourly volume", () => {
+  const gate = createViewGate({ dedupeMs: 5 * MINUTE, maxPerHour: 3 });
+  const t0 = 1_000_000_000;
+  assert.equal(gate.allow("/crew", t0), true);
+  assert.equal(gate.allow("/crew", t0 + MINUTE), false); // same page again within 5 minutes
+  assert.equal(gate.allow("/photos", t0 + MINUTE), true); // different page
+  assert.equal(gate.allow("/crew", t0 + 6 * MINUTE), true); // 5 minutes passed
+  assert.equal(gate.allow("/sites", t0 + 7 * MINUTE), false); // hourly cap of 3 reached
+  assert.equal(gate.allow("/sites", t0 + 61 * MINUTE), true); // a new hour
+});
+
+test("the gate's memory survives a reload, so a reload loop cannot dodge the hourly cap", () => {
+  let saved: Parameters<typeof createViewGate>[1];
+  const first = createViewGate({ dedupeMs: 5 * MINUTE, maxPerHour: 2 }, undefined, state => (saved = state));
+  const t0 = 2_000_000_000;
+  assert.equal(first.allow("view:/a", t0), true);
+  assert.equal(first.allow("view:/b", t0 + 1), true);
+  // "Reload": a brand-new gate restored from what the first one saved.
+  const second = createViewGate({ dedupeMs: 5 * MINUTE, maxPerHour: 2 }, saved);
+  assert.equal(second.allow("view:/a", t0 + 2 * MINUTE), false); // still a repeat
+  assert.equal(second.allow("view:/c", t0 + 2 * MINUTE), false); // cap of 2 already used
+});

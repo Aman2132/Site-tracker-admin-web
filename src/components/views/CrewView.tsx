@@ -16,6 +16,7 @@ import {
   UserX,
   Users,
 } from "lucide-react";
+import { describeChanges, describeFields } from "@/lib/auditLog";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -47,7 +48,7 @@ import {
 import { formatHours, roleLabel, timeAgo } from "@/lib/format";
 import { hoursOnDay } from "@/lib/insights";
 import { dayStart } from "@/lib/time";
-import { attempt, useLiveStore, useLookups, useNow } from "@/lib/store";
+import { attempt, logAction, useLiveStore, useLookups, useNow } from "@/lib/store";
 import { defaultSiteAmong } from "@/lib/prefs";
 import { useTarget } from "@/lib/useTarget";
 import { cn } from "@/lib/utils";
@@ -87,7 +88,7 @@ function CrewActions({ person, onAssign }: { person: CrewMember; onAssign: () =>
           <DropdownMenuItem
             onClick={async () => {
               if (!person.email) return toast.error("No email on file for this person.");
-              if (await attempt("Resending the invite", () => resendInvite(person.email), { targetType: "person", targetId: person.id }))
+              if (await attempt("Resending the invite", () => resendInvite(person.email), { targetType: "person", targetId: person.id, changes: describeFields([{ label: "sent to", value: person.email }]) }))
                 toast.success("Invite re-sent", { description: `New set-password link sent to ${person.email}.` });
             }}
           >
@@ -98,7 +99,7 @@ function CrewActions({ person, onAssign }: { person: CrewMember; onAssign: () =>
         <DropdownMenuItem
           variant={deactivated ? "default" : "destructive"}
           onClick={async () => {
-            if (!(await attempt(deactivated ? "Reactivating" : "Deactivating", () => setCrewActive(person.id, person.name, deactivated), { targetType: "person", targetId: person.id }))) return;
+            if (!(await attempt(deactivated ? "Reactivating" : "Deactivating", () => setCrewActive(person.id, person.name, deactivated), { targetType: "person", targetId: person.id, changes: describeChanges([{ label: "active", before: !deactivated, after: deactivated }]) }))) return;
             toast(deactivated ? `${person.name} reactivated` : `${person.name} deactivated`, {
               description: deactivated ? "They can sign in again." : "They're signed out and can't sign back in.",
             });
@@ -169,6 +170,7 @@ export function CrewView() {
     a.download = "crew.csv";
     a.click();
     URL.revokeObjectURL(url);
+    logAction("Exported crew CSV", { kind: "export", changes: describeFields([{ label: "rows", value: rows.length }]) });
     toast.success("Crew exported", { description: `${rows.length} rows · crew.csv` });
   };
 

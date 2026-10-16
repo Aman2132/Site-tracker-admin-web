@@ -18,6 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { describeChanges, describeFields } from "@/lib/auditLog";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -35,7 +36,7 @@ import { SessionEditDialog } from "@/components/domain/SessionEditDialog";
 import { StatusChip } from "@/components/domain/StatusDot";
 import { CountUp, Stagger, StaggerItem } from "@/components/motion";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { formatClock, formatDate, formatDay, formatHours, formatTime, formatWeekday, hourOfDay, roleLabel, timeAgo } from "@/lib/format";
+import { formatClock, formatDate, formatDateTime, formatDay, formatHours, formatTime, formatWeekday, hourOfDay, roleLabel, timeAgo } from "@/lib/format";
 import { attendanceFor, isOnShift, lastNDays, overlappingSessionIds } from "@/lib/insights";
 import { HOUR } from "@/lib/time";
 import { attempt, useLiveStore, useNow } from "@/lib/store";
@@ -136,7 +137,7 @@ export function CrewProfileView({ id }: { id: string }) {
                     className="rounded-xl"
                     onClick={async () => {
                       if (!person.email) return toast.error("No email on file for this person.");
-                      if (await attempt("Resending the invite", () => resendInvite(person.email), { targetType: "person", targetId: person.id }))
+                      if (await attempt("Resending the invite", () => resendInvite(person.email), { targetType: "person", targetId: person.id, changes: describeFields([{ label: "sent to", value: person.email }]) }))
                         toast.success("Invite re-sent", { description: `New set-password link sent to ${person.email}.` });
                     }}
                   >
@@ -151,7 +152,7 @@ export function CrewProfileView({ id }: { id: string }) {
                   size="lg"
                   className="rounded-xl"
                   onClick={async () => {
-                    if (!(await attempt(deactivated ? "Reactivating" : "Deactivating", () => setCrewActive(person.id, person.name, deactivated), { targetType: "person", targetId: person.id }))) return;
+                    if (!(await attempt(deactivated ? "Reactivating" : "Deactivating", () => setCrewActive(person.id, person.name, deactivated), { targetType: "person", targetId: person.id, changes: describeChanges([{ label: "active", before: !deactivated, after: deactivated }]) }))) return;
                     toast(deactivated ? `${person.name} reactivated` : `${person.name} deactivated`);
                   }}
                 >
@@ -369,6 +370,11 @@ export function CrewProfileView({ id }: { id: string }) {
             targetType: "session",
             targetId: session.id,
             note,
+            changes: describeChanges([
+              { label: "check-in", before: formatDateTime(session.start), after: formatDateTime(changes.start) },
+              { label: "check-out", before: session.end ? formatDateTime(session.end) : "", after: changes.end ? formatDateTime(changes.end) : "" },
+              { label: "site", before: sites.find(s => s.id === session.siteId)?.name, after: sites.find(s => s.id === changes.siteId)?.name },
+            ]),
           });
           if (saved) toast.success("Check-in corrected");
           return saved != null;

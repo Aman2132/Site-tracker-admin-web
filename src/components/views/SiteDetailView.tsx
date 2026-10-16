@@ -1,5 +1,6 @@
 "use client";
 
+import { describeChanges } from "@/lib/auditLog";
 import { ArrowLeft, Building2, CalendarDays, ChevronDown, Clock, Crosshair, ImageIcon, UserPlus, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
@@ -112,7 +113,7 @@ export function SiteDetailView({ id }: { id: string }) {
                     <DropdownMenuContent align="start" className="w-44">
                       <DropdownMenuRadioGroup
                         value={site.status}
-                        onValueChange={v => attempt("Updating status", () => setSiteStatus(site.id, v as SiteStatus), { targetType: "site", targetId: site.id, note: String(v) })}
+                        onValueChange={v => attempt("Updating status", () => setSiteStatus(site.id, v as SiteStatus), { targetType: "site", targetId: site.id, changes: describeChanges([{ label: "status", before: site.status, after: String(v) }]) })}
                       >
                         {(["planning", "active", "paused", "completed"] as const).map(status => (
                           <DropdownMenuRadioItem key={status} value={status} className="capitalize">

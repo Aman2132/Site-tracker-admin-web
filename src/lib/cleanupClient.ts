@@ -26,7 +26,7 @@ import { collectionUsage, estimateDocBytes } from "./usage";
  * Photos and orphan files are not here: they need the file-store key, so they
  * go through the server route /api/cleanup.
  */
-export type FirestoreKind = "events" | "sessions" | "inventory";
+export type FirestoreKind = "events" | "sessions" | "inventory" | "views";
 
 /** Firestore allows 500 writes in one batch. */
 const BATCH = 500;
@@ -43,6 +43,7 @@ function queriesFor(kind: FirestoreKind, cutoff: number): Query<DocumentData>[] 
       query(collection(db, "events"), where("at", "<", cutoff)),
     ];
   }
+  if (kind === "views") return [query(collection(db, "adminViews"), where("at", "<", cutoff))];
   if (kind === "sessions") return [query(collection(db, "sessions"), where("start", "<", cutoff))];
   return [query(collection(db, "inventory"), where("receivedAt", "<", cutoff))];
 }

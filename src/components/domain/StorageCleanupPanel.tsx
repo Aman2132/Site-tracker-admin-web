@@ -14,7 +14,7 @@ import { refreshStorageUsage } from "@/lib/useStorageUsage";
 import { TextInput } from "./FormBits";
 import { SegmentedControl } from "./SegmentedControl";
 
-const KINDS: CleanupKind[] = ["photos", "orphans", "events", "sessions", "inventory"];
+const KINDS: CleanupKind[] = ["photos", "orphans", "events", "sessions", "inventory", "views"];
 
 interface Row {
   days: number;

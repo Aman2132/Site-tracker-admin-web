@@ -5,7 +5,8 @@ import { toast } from "sonner";
 
 import { DeletePhotosDialog } from "@/components/domain/DeletePhotosDialog";
 import { Lightbox } from "@/components/domain/Lightbox";
-import { attempt, useLiveStore } from "@/lib/store";
+import { describePhotoDeletion } from "@/lib/auditText";
+import { attempt, useLiveStore, useLookups } from "@/lib/store";
 
 import type { SitePhoto } from "@/types/domain";
 
@@ -22,6 +23,7 @@ export function DeletableLightbox({
   onChange: (id: string) => void;
 }) {
   const { deletePhotos } = useLiveStore();
+  const { personById, siteById } = useLookups();
   const [pending, setPending] = useState<SitePhoto[]>([]);
   const [deleting, setDeleting] = useState(false);
 
@@ -30,7 +32,7 @@ export function DeletableLightbox({
     const outcome = await attempt("Deleting photos", () => deletePhotos(pending), {
       targetType: "photo",
       targetId: pending.length === 1 ? pending[0].id : undefined,
-      note: `${pending.length} photo(s)`,
+      changes: describePhotoDeletion(pending, id => personById.get(id)?.name, id => siteById.get(id)?.name),
     });
     setDeleting(false);
     setPending([]);

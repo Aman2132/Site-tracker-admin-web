@@ -11,7 +11,7 @@ import {
 } from "./usage";
 
 /** The collections the app uses. The audit log is superadmin-only, so a plain admin sees it as unavailable. */
-const COLLECTIONS = ["people", "sites", "sessions", "photos", "events", "inventory", "adminAudit", "pushTokens"];
+const COLLECTIONS = ["people", "sites", "sessions", "photos", "events", "inventory", "adminAudit", "adminViews", "pushTokens"];
 /** Documents read per collection to average their size. */
 const SAMPLE = 10;
 /** Where the last measured average sizes are kept, so a refresh usually costs only the counts. */
