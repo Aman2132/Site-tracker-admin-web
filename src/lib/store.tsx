@@ -68,6 +68,8 @@ interface LiveStore {
   inviteCrew: typeof admin.inviteCrew;
   resendInvite: typeof admin.resendInvite;
   deletePhotos: typeof admin.deletePhotos;
+  deletePerson: typeof admin.deletePerson;
+  deleteSite: typeof admin.deleteSite;
   addInventoryEntry: typeof admin.addInventoryEntry;
   updateInventoryEntry: typeof admin.updateInventoryEntry;
   deleteInventoryEntry: typeof admin.deleteInventoryEntry;
@@ -189,6 +191,8 @@ const ACTIONS = {
   inviteCrew: admin.inviteCrew,
   resendInvite: admin.resendInvite,
   deletePhotos: admin.deletePhotos,
+  deletePerson: admin.deletePerson,
+  deleteSite: admin.deleteSite,
   addInventoryEntry: admin.addInventoryEntry,
   updateInventoryEntry: admin.updateInventoryEntry,
   deleteInventoryEntry: admin.deleteInventoryEntry,

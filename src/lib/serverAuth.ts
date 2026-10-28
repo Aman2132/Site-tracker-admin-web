@@ -61,6 +61,6 @@ async function requireRole(idToken: string, roles: string[], refusal: string): P
 export const requireOwner = (idToken: string) =>
   requireRole(idToken, ["owner", "superadmin"], "Only an active owner can delete photos.");
 
-/** Same, for the superadmin only (bulk cleanup). */
-export const requireSuperadmin = (idToken: string) =>
-  requireRole(idToken, ["superadmin"], "Only the superadmin can run a cleanup.");
+/** Same, for the superadmin only (bulk cleanup, deleting accounts and sites). */
+export const requireSuperadmin = (idToken: string, refusal = "Only the superadmin can run a cleanup.") =>
+  requireRole(idToken, ["superadmin"], refusal);

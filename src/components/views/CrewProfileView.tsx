@@ -13,20 +13,24 @@ import {
   MailPlus,
   Phone,
   Timer,
+  Trash2,
   UserCheck,
   UserX,
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { describeChanges, describeFields } from "@/lib/auditLog";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { useAdmin, useIsSuperadmin } from "@/components/auth/AuthProvider";
 import { BarCompare } from "@/components/charts/BarCompare";
 import { ActivityFeed } from "@/components/domain/ActivityFeed";
 import { AssignSitesSheet } from "@/components/domain/AssignSheet";
 import { BatteryMeter } from "@/components/domain/BatteryMeter";
 import { CrewMap } from "@/components/domain/CrewMap";
+import { DeleteRecordDialog } from "@/components/domain/DeleteRecordDialog";
 import { DeletableLightbox } from "@/components/domain/DeletableLightbox";
 import { EmptyState, Panel } from "@/components/domain/Panel";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
@@ -44,8 +48,13 @@ import { useTarget } from "@/lib/useTarget";
 import { cn } from "@/lib/utils";
 
 export function CrewProfileView({ id }: { id: string }) {
-  const { crew, sites, sessions, photos, events, setCrewActive, resendInvite, updateSession } = useLiveStore();
+  const { crew, sites, sessions, photos, events, setCrewActive, resendInvite, updateSession, deletePerson } = useLiveStore();
   const now = useNow();
+  const router = useRouter();
+  const isSuperadmin = useIsSuperadmin();
+  const { uid: myUid } = useAdmin();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const person = crew.find(c => c.id === id);
   const assign = useTarget();
   const [openPhoto, setOpenPhoto] = useState<string | null>(null);
@@ -158,6 +167,11 @@ export function CrewProfileView({ id }: { id: string }) {
                 >
                   {deactivated ? <UserCheck /> : <UserX />} {deactivated ? "Reactivate" : "Deactivate"}
                 </Button>
+                {isSuperadmin && person.id !== myUid && person.appRole !== "superadmin" && (
+                  <Button variant="outline" size="lg" className="rounded-xl text-danger" onClick={() => setConfirmingDelete(true)}>
+                    <Trash2 /> Delete
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -380,6 +394,27 @@ export function CrewProfileView({ id }: { id: string }) {
           return saved != null;
         }}
       />
+      <DeleteRecordDialog
+        open={confirmingDelete}
+        title={`Delete ${person.name} permanently?`}
+        confirmWord={person.name}
+        busy={deleting}
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={async () => {
+          setDeleting(true);
+          const done = await attempt("Deleting a crew member", () => deletePerson(person.id), { targetType: "person", targetId: person.id, note: person.name });
+          setDeleting(false);
+          if (!done) return;
+          setConfirmingDelete(false);
+          toast.success(`${person.name} deleted`);
+          router.push("/crew");
+        }}
+      >
+        <p>
+          Removes their <b>login account</b>, <b>profile</b>, live position and every <b>photo</b> they took (file, thumbnail and record).
+        </p>
+        <p>Their check-in history, inventory entries and activity events stay for the records.</p>
+      </DeleteRecordDialog>
       <AssignSitesSheet key={assign.key} personId={assign.id} open={assign.open} onOpenChange={assign.setOpen} />
       <DeletableLightbox photos={data.photos.slice(0, 12)} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
     </>

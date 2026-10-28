@@ -1,15 +1,19 @@
 "use client";
 
 import { describeChanges } from "@/lib/auditLog";
-import { ArrowLeft, Building2, CalendarDays, ChevronDown, Clock, Crosshair, ImageIcon, UserPlus, UserRound, Users } from "lucide-react";
+import { ArrowLeft, Building2, CalendarDays, ChevronDown, Clock, Crosshair, ImageIcon, Trash2, UserPlus, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
+import { useIsSuperadmin } from "@/components/auth/AuthProvider";
 import { BarCompare } from "@/components/charts/BarCompare";
 import { ActivityFeed } from "@/components/domain/ActivityFeed";
 import { AssignCrewSheet } from "@/components/domain/AssignSheet";
 import { DeletableLightbox } from "@/components/domain/DeletableLightbox";
+import { DeleteRecordDialog } from "@/components/domain/DeleteRecordDialog";
 import { EmptyState, Panel } from "@/components/domain/Panel";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
 import { PhotoThumb } from "@/components/domain/PhotoThumb";
@@ -36,10 +40,14 @@ import { cn } from "@/lib/utils";
 import type { SiteStatus } from "@/types/domain";
 
 export function SiteDetailView({ id }: { id: string }) {
-  const { sites, roster: crew, sessions, photos, events, setSiteStatus } = useLiveStore();
+  const { sites, roster: crew, sessions, photos, events, setSiteStatus, deleteSite } = useLiveStore();
   const now = useNow();
   const { openAddCrew } = useDialogs();
   const assign = useTarget();
+  const router = useRouter();
+  const isSuperadmin = useIsSuperadmin();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [openPhoto, setOpenPhoto] = useState<string | null>(null);
   const site = sites.find(s => s.id === id);
 
@@ -138,6 +146,11 @@ export function SiteDetailView({ id }: { id: string }) {
               <Button size="lg" className="rounded-xl px-4 shadow-glow" onClick={() => openAddCrew(site.id)}>
                 <UserPlus /> Add crew
               </Button>
+              {isSuperadmin && (
+                <Button variant="outline" size="lg" className="rounded-xl bg-card text-danger" onClick={() => setConfirmingDelete(true)}>
+                  <Trash2 /> Delete
+                </Button>
+              )}
             </div>
           </div>
         </StaggerItem>
@@ -262,6 +275,28 @@ export function SiteDetailView({ id }: { id: string }) {
         </StaggerItem>
       </Stagger>
 
+      <DeleteRecordDialog
+        open={confirmingDelete}
+        title={`Delete ${site.name} permanently?`}
+        confirmWord={site.name}
+        busy={deleting}
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={async () => {
+          setDeleting(true);
+          const done = await attempt("Deleting a site", () => deleteSite(site.id), { targetType: "site", targetId: site.id, note: site.name });
+          setDeleting(false);
+          if (!done) return;
+          setConfirmingDelete(false);
+          toast.success(`${site.name} deleted`);
+          router.push("/sites");
+        }}
+      >
+        <p>
+          Removes the site and everything filed under it: its <b>photos</b> (file, thumbnail and record), <b>inventory entries</b>, <b>check-in sessions</b> and
+          <b> activity events</b>. It is also taken off every person&apos;s assigned sites.
+        </p>
+        <p>Anyone checked in there right now is not checked out on their phone.</p>
+      </DeleteRecordDialog>
       <AssignCrewSheet key={assign.key} siteId={assign.id} open={assign.open} onOpenChange={assign.setOpen} />
       <DeletableLightbox photos={gallery} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
     </>
