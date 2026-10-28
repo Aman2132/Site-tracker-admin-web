@@ -21,8 +21,10 @@ export class HttpError extends Error {
   }
 }
 
-export const firestoreUrl = (path: string) =>
-  `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/${path}`;
+/** The Firestore REST root for this project (`:runQuery` and friends hang off it). */
+export const FIRESTORE_DOCUMENTS = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
+
+export const firestoreUrl = (path: string) => `${FIRESTORE_DOCUMENTS}/${path}`;
 
 export const bearer = (idToken: string) => ({ authorization: `Bearer ${idToken}` });
 
@@ -31,8 +33,8 @@ interface ProfileFields {
   active?: { booleanValue?: boolean };
 }
 
-/** Resolves with the owner's uid, or throws an HttpError (401 not signed in, 403 not an owner). */
-export async function requireOwner(idToken: string): Promise<string> {
+/** Verifies the sign-in token and that the person's profile has one of the allowed roles and isn't deactivated. Resolves with their uid. */
+async function requireRole(idToken: string, roles: string[], refusal: string): Promise<string> {
   if (!PROJECT_ID) throw new HttpError(500, "Firebase isn't configured on the server.");
 
   let uid: string;
@@ -48,10 +50,17 @@ export async function requireOwner(idToken: string): Promise<string> {
   }
 
   const response = await fetch(firestoreUrl(`people/${uid}`), { headers: bearer(idToken), cache: "no-store" });
-  if (!response.ok) throw new HttpError(403, "Couldn't confirm that you're an admin.");
+  if (!response.ok) throw new HttpError(403, "Couldn't confirm your role.");
   const fields = ((await response.json()) as { fields?: ProfileFields }).fields ?? {};
-  const role = fields.appRole?.stringValue;
-  const isOwner = (role === "owner" || role === "superadmin") && fields.active?.booleanValue !== false;
-  if (!isOwner) throw new HttpError(403, "Only an active owner can delete photos.");
+  const role = fields.appRole?.stringValue ?? "";
+  if (!roles.includes(role) || fields.active?.booleanValue === false) throw new HttpError(403, refusal);
   return uid;
 }
+
+/** Resolves with the owner's uid, or throws an HttpError (401 not signed in, 403 not an owner). */
+export const requireOwner = (idToken: string) =>
+  requireRole(idToken, ["owner", "superadmin"], "Only an active owner can delete photos.");
+
+/** Same, for the superadmin only (bulk cleanup, deleting accounts and sites). */
+export const requireSuperadmin = (idToken: string, refusal = "Only the superadmin can run a cleanup.") =>
+  requireRole(idToken, ["superadmin"], refusal);

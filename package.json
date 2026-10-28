@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test src/lib/live.test.ts"
+    "test": "node --test src/lib/live.test.ts src/lib/reset.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -17,6 +17,7 @@
     "cn": "^0.4.0",
     "date-fns": "^4.4.0",
     "firebase": "^12.19.0",
+    "firebase-admin": "^14.5.0",
     "jose": "^6.2.12",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.52.0",

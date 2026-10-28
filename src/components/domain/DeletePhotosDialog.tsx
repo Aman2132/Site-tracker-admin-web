@@ -40,7 +40,7 @@ export function DeletePhotosDialog({
             </div>
           </div>
           <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-            A worker&apos;s phone keeps its own saved copy; that isn&apos;t touched.
+            A worker&apos;s phone removes its own saved copy the next time the app opens, if it is online.
           </p>
           <div className="flex gap-2 pt-1">
             <Button variant="outline" size="lg" className="flex-1" onClick={onCancel} disabled={busy}>

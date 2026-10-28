@@ -214,3 +214,172 @@ test("back-to-back repeats fold into one event with a count", () => {
   const out = collapseRepeats([e("1", NOW, "paused"), e("2", NOW - MINUTE, "paused"), e("3", NOW - 2 * MINUTE, "paused"), e("4", NOW - 3 * MINUTE, "resumed")]);
   assert.deepEqual(out.map(x => [x.id, x.count]), [["1", 3], ["4", 1]]);
 });
+
+import { averageIsFresh, collectionUsage, collectionUsageFromAverage, estimateDocBytes, formatBytes, formatShare, nameBytes, share, valueBytes } from "./usage.ts";
+
+test("firestore value sizes follow the published rules", () => {
+  assert.equal(valueBytes("abc"), 4); // utf-8 length + 1
+  assert.equal(valueBytes(12345), 8);
+  assert.equal(valueBytes(true), 1);
+  assert.equal(valueBytes(null), 1);
+  assert.equal(valueBytes(["ab", "c"]), 3 + 2);
+  assert.equal(valueBytes({ k: "v" }), 1 + 1 + 2); // key + 1, value
+  assert.equal(valueBytes({ toMillis: () => 1 }), 16);
+  assert.equal(nameBytes("people/abc"), 16 + 7 + 4);
+});
+
+test("a document's estimate counts its fields, 32 bytes of overhead and two index entries per small field", () => {
+  const path = "sites/s1";
+  const name = nameBytes(path);
+  assert.equal(estimateDocBytes(path, { n: 1 }), name + (1 + 1 + 8) + 32 + 2 * (name + 2 + 8 + 32));
+  // A huge value (a data-URI avatar) is stored but not indexed.
+  assert.equal(estimateDocBytes(path, { a: "x".repeat(5000) }), name + (1 + 1 + 5001) + 32);
+});
+
+test("collection usage scales a sampled average by the exact count, or reuses a remembered one", () => {
+  const sample = [{ path: "x/1", data: { n: 1 } }, { path: "x/2", data: { n: 2 } }];
+  const u = collectionUsage("x", 100, sample);
+  assert.equal(u.avgBytes, estimateDocBytes("x/1", { n: 1 }));
+  assert.equal(u.bytes, Math.round(u.avgBytes * 100));
+  assert.equal(collectionUsage("empty", 0, []).bytes, 0);
+  const reused = collectionUsageFromAverage("x", 50, 200);
+  assert.deepEqual([reused.bytes, reused.sampled], [10_000, 0]);
+});
+
+test("a remembered average is reused until the collection doubles or halves", () => {
+  const saved = { avgBytes: 300, count: 100 };
+  assert.equal(averageIsFresh(saved, 100), true);
+  assert.equal(averageIsFresh(saved, 199), true);
+  assert.equal(averageIsFresh(saved, 201), false);
+  assert.equal(averageIsFresh(saved, 49), false);
+  assert.equal(averageIsFresh(undefined, 10), false);
+  assert.equal(averageIsFresh(undefined, 0), true); // nothing to sample
+});
+
+test("byte and share formatting", () => {
+  assert.equal(formatBytes(812), "812 B");
+  assert.equal(formatBytes(14_200), "14 KB");
+  assert.equal(formatBytes(3_400_000), "3.4 MB");
+  assert.equal(formatBytes(520_000_000), "520 MB");
+  assert.equal(formatBytes(1_230_000_000), "1.23 GB");
+  assert.equal(formatShare(0), "0%");
+  assert.equal(formatShare(0.0004), "<0.1%");
+  assert.equal(formatShare(0.052), "5.2%");
+  assert.equal(formatShare(0.634), "63%");
+  assert.equal(share(2_000, 1_000), 1);
+});
+
+import { fullestAllowance } from "./usage.ts";
+
+test("the sidebar meter shows whichever allowance is closest to full", () => {
+  assert.equal(fullestAllowance(171_000, 659, 21_000_000).key, "files");
+  assert.equal(fullestAllowance(900 * 1024 ** 2, 659, 21_000_000).key, "firestore");
+  // Photo files not known yet: it can only choose between the other two.
+  assert.equal(fullestAllowance(171_000, 659, null).key, "firestore");
+  const full = fullestAllowance(0, 0, 1_500_000_000);
+  assert.deepEqual([full.key, full.fraction], ["files", 1]);
+});
+
+import { AGE_CHOICES, auditLine, chunk, confirmMatches, cutoffFor, findOrphans, sumBytes } from "./cleanup.ts";
+
+test("only files nothing points to, and old enough, are orphans", () => {
+  const now = 100 * HOUR;
+  const files = [
+    { path: "p1/a.jpg", size: 10, createdAt: now - 5 * HOUR },
+    { path: "p1/a_thumb.jpg", size: 2, createdAt: now - 5 * HOUR },
+    { path: "p1/lost.jpg", size: 7, createdAt: now - 5 * HOUR },
+    { path: "p1/uploading.jpg", size: 9, createdAt: now - 10 * MINUTE }, // an upload still being saved
+    { path: "p1/undated.jpg", size: 4 }, // age unknown: never touched
+  ];
+  const referenced = new Set(["p1/a.jpg", "p1/a_thumb.jpg"]);
+  const orphans = findOrphans(files, referenced, now);
+  assert.deepEqual(orphans.map(f => f.path), ["p1/lost.jpg"]);
+  assert.equal(sumBytes(orphans), 7);
+});
+
+test("cutoffs, chunking and the typed confirmation", () => {
+  assert.equal(cutoffFor(30, 100 * DAY), 70 * DAY);
+  assert.ok(AGE_CHOICES.every(d => d >= 30));
+  assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+  assert.deepEqual(chunk([], 3), []);
+  assert.equal(confirmMatches("DELETE"), true);
+  assert.equal(confirmMatches("  DELETE "), true);
+  assert.equal(confirmMatches("delete"), false);
+  assert.equal(confirmMatches(""), false);
+});
+
+test("the audit line says what, how old and how much", () => {
+  assert.equal(
+    auditLine({ kind: "photos", deleted: 142, failed: [], remaining: 0 }, 90, "38 MB"),
+    "Cleanup: deleted 142 old photos (older than 90 days) — 38 MB"
+  );
+  assert.equal(auditLine({ kind: "orphans", deleted: 3, failed: [], remaining: 0 }, null, null), "Cleanup: deleted 3 orphan files");
+});
+
+import { createViewGate, describeChanges, describeFields, externalTarget, failureReason, listNames, pageTitle, wasRefused } from "./auditLog.ts";
+
+test("only the fields that really changed are described, as before → after", () => {
+  assert.equal(
+    describeChanges([
+      { label: "name", before: "Alpha", after: "Alpha 2" },
+      { label: "status", before: "planning", after: "planning" },
+      { label: "active", before: true, after: false },
+      { label: "sites", before: ["A"], after: ["A", "B"] },
+      { label: "manager", before: "", after: "Ram" },
+    ]),
+    'name: "Alpha" → "Alpha 2"; active: yes → no; sites: "A" → "A", "B"; manager: — → "Ram"'
+  );
+  assert.equal(describeChanges([{ label: "x", before: 1, after: 1 }]), undefined);
+  assert.ok((describeChanges([{ label: "x", before: "a", after: "b".repeat(5000) }]) ?? "").length <= 1000);
+});
+
+test("created and deleted records are described by what they held", () => {
+  assert.equal(describeFields([{ label: "item", value: "Cement" }, { label: "note", value: "" }, { label: "qty", value: 40 }]), 'item: "Cement"; qty: 40');
+  assert.equal(describeFields([{ label: "a", value: undefined }]), undefined);
+  assert.equal(listNames(["a", "b"]), "a, b");
+  assert.equal(listNames(["a", "b", "c", "d", "e", "f", "g"]), "a, b, c, d, e and 2 more");
+});
+
+test("failures are worded and told apart from refusals", () => {
+  assert.equal(failureReason(new Error("Network down")), "Network down");
+  assert.equal(failureReason("odd"), "Something went wrong.");
+  assert.equal(wasRefused({ code: "permission-denied", message: "x" }), true);
+  assert.equal(wasRefused(new Error("Only the superadmin can run a cleanup.")), true);
+  assert.equal(wasRefused(new Error("Cleanup failed (403).")), true);
+  assert.equal(wasRefused(new Error("Network down")), false);
+});
+
+test("page titles and outbound links", () => {
+  assert.equal(pageTitle("/"), "Overview");
+  assert.equal(pageTitle("/crew/abc123"), "Crew profile");
+  assert.equal(pageTitle("/crew"), "Crew");
+  assert.equal(pageTitle("/storage"), "Storage");
+  assert.equal(pageTitle("/something-else"), "/something-else");
+  assert.equal(externalTarget("https://maps.google.com/?q=1,2&token=x", "http://localhost:3000"), "maps.google.com/");
+  assert.equal(externalTarget("/photos", "http://localhost:3000"), null);
+  assert.equal(externalTarget("http://localhost:3000/crew", "http://localhost:3000"), null);
+  assert.equal(externalTarget("mailto:a@b.c", "http://localhost:3000"), null);
+});
+
+test("the page-view gate drops quick repeats and caps the hourly volume", () => {
+  const gate = createViewGate({ dedupeMs: 5 * MINUTE, maxPerHour: 3 });
+  const t0 = 1_000_000_000;
+  assert.equal(gate.allow("/crew", t0), true);
+  assert.equal(gate.allow("/crew", t0 + MINUTE), false); // same page again within 5 minutes
+  assert.equal(gate.allow("/photos", t0 + MINUTE), true); // different page
+  assert.equal(gate.allow("/crew", t0 + 6 * MINUTE), true); // 5 minutes passed
+  assert.equal(gate.allow("/sites", t0 + 7 * MINUTE), false); // hourly cap of 3 reached
+  assert.equal(gate.allow("/sites", t0 + 61 * MINUTE), true); // a new hour
+});
+
+test("the gate's memory survives a reload, so a reload loop cannot dodge the hourly cap", () => {
+  let saved: Parameters<typeof createViewGate>[1];
+  const first = createViewGate({ dedupeMs: 5 * MINUTE, maxPerHour: 2 }, undefined, state => (saved = state));
+  const t0 = 2_000_000_000;
+  assert.equal(first.allow("view:/a", t0), true);
+  assert.equal(first.allow("view:/b", t0 + 1), true);
+  // "Reload": a brand-new gate restored from what the first one saved.
+  const second = createViewGate({ dedupeMs: 5 * MINUTE, maxPerHour: 2 }, saved);
+  assert.equal(second.allow("view:/a", t0 + 2 * MINUTE), false); // still a repeat
+  assert.equal(second.allow("view:/c", t0 + 2 * MINUTE), false); // cap of 2 already used
+});

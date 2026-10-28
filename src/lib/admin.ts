@@ -15,6 +15,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
+import { CHANGES_MAX, REASON_MAX, type AuditKind } from "./auditLog";
 import { FIREBASE_CONFIG, firebase } from "./firebase";
 
 import type { AppRole, EventKind, InventoryChanges, SessionEndReason, SitePhoto, SiteStatus } from "../types/domain";
@@ -215,6 +216,36 @@ export async function deletePhotos(photos: Pick<SitePhoto, "id">[]): Promise<Pho
   return { deleted: data.deleted ?? [], failed: data.failed ?? [] };
 }
 
+/** Asks one of the dashboard's superadmin-only delete routes to remove a person or a site. */
+async function postDelete(route: string, id: string): Promise<void> {
+  const user = firebase().auth.currentUser;
+  if (!user) throw new Error("Sign in again.");
+  const response = await fetch(route, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${await user.getIdToken()}` },
+    body: JSON.stringify({ id }),
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `Deleting failed (${response.status}).`);
+  }
+}
+
+/**
+ * 🚨 Superadmin only. Deletes a crew member for good: login account, photos
+ * (files, thumbnails AND records), live position and profile. Their check-in
+ * history, inventory entries and activity events stay. Done on the server
+ * (/api/people/delete) because a browser can't delete another person's login.
+ */
+export const deletePerson = (id: string): Promise<void> => postDelete("/api/people/delete", id);
+
+/**
+ * 🚨 Superadmin only. Deletes a site for good with its photos (files,
+ * thumbnails AND records), inventory entries, check-in sessions and events.
+ * Done on the server (/api/sites/delete).
+ */
+export const deleteSite = (id: string): Promise<void> => postDelete("/api/sites/delete", id);
+
 /**
  * Corrects an entry the crew logged. Stamps who changed it and when, which the
  * app shows the crew as "Corrected by admin".
@@ -263,20 +294,34 @@ export async function addInventoryEntry(changes: InventoryChanges, personName: s
  * One line in the superadmin-only audit trail. Never throws: a failed log must
  * not undo or block the action it records. Called by attempt() in store.tsx.
  */
-export async function logAdminAction(
-  action: string,
-  details: { targetType?: string; targetId?: string; note?: string },
-  actorName: string
-): Promise<void> {
+export interface AuditFields {
+  targetType?: string;
+  targetId?: string;
+  note?: string;
+  /** What kind of line this is; absent reads as a change. */
+  kind?: AuditKind;
+  /** Before → after text for an edit, or what a deleted/created record held. */
+  changes?: string;
+  /** Why an action failed or was refused. */
+  reason?: string;
+}
+
+const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+export async function logAdminAction(action: string, details: AuditFields, actorName: string): Promise<void> {
   const uid = firebase().auth.currentUser?.uid;
   if (!uid) return;
-  const present = Object.fromEntries(
-    Object.entries({ ...details, note: details.note?.trim() || undefined }).filter(([, v]) => v != null && v !== "")
-  );
+  const fields = {
+    ...details,
+    note: details.note?.trim() ? clip(details.note.trim(), 500) : undefined,
+    changes: details.changes ? clip(details.changes, CHANGES_MAX) : undefined,
+    reason: details.reason ? clip(details.reason, REASON_MAX) : undefined,
+  };
+  const present = Object.fromEntries(Object.entries(fields).filter(([, v]) => v != null && v !== ""));
   await addDoc(collection(firebase().db, "adminAudit"), {
     actorId: uid,
     actorName,
-    action,
+    action: clip(action, 300),
     ...present,
     at: Date.now(),
   }).catch(e => console.warn("[admin] audit log failed —", e));

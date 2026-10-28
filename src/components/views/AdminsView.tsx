@@ -1,5 +1,6 @@
 "use client";
 
+import { describeChanges } from "@/lib/auditLog";
 import { Loader2, ShieldCheck, ShieldOff } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -46,6 +47,7 @@ function Admins() {
     const done = await attempt(grant ? "Granting admin" : "Revoking admin", () => setAppRole(pending.id, role), {
       targetType: "person",
       targetId: pending.id,
+      changes: describeChanges([{ label: "role", before: pending.appRole === "owner" ? "admin" : "worker", after: role === "owner" ? "admin" : "worker" }]),
     });
     setBusy(false);
     if (!done) return;

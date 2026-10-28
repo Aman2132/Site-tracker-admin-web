@@ -39,8 +39,7 @@ export function PhotoThumb({
   onToggle?: (photo: SitePhoto) => void;
 }) {
   const { personById, siteById } = useLookups();
-  const [loaded, setLoaded] = useState(false);
-  const person = personById.get(photo.personId);
+  const [loaded, setLoaded] = useState(false);  const person = personById.get(photo.personId);
   const site = siteById.get(photo.siteId);
 
   return (

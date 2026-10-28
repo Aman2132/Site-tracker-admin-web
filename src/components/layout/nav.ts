@@ -2,6 +2,7 @@ import {
   Activity,
   CalendarClock,
   Building2,
+  HardDrive,
   Images,
   LayoutDashboard,
   Map,
@@ -33,6 +34,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/activity", label: "Activity", icon: Activity, description: "Everything that happened" },
   { href: "/admins", label: "Admins", icon: ShieldCheck, description: "Who has admin access", superadmin: true },
   { href: "/audit", label: "Audit log", icon: ScrollText, description: "Every admin edit", superadmin: true },
+  { href: "/storage", label: "Storage", icon: HardDrive, description: "How much free space is used" },
   { href: "/settings", label: "Settings", icon: Settings, description: "Your account and appearance" },
 ];
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { describeFields } from "@/lib/auditLog";
 import { ArrowLeft, ArrowRight, Building2, HardHat, Loader2, Mail, MailCheck, ShieldCheck, Sparkles, UserPlus } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
@@ -84,7 +85,19 @@ export function AddCrewDialog({
     // A rotating colour so neighbours in the list are easy to tell apart.
     const result = await attempt("Creating the account", () =>
       inviteCrew({ ...form, email: form.email.trim(), name: form.name.trim(), color: CREW_COLORS[crew.length % CREW_COLORS.length] }),
-      { targetType: "person", note: `${form.name.trim()} <${form.email.trim()}> as ${form.appRole}` }
+      {
+        targetType: "person",
+        note: `${form.name.trim()} <${form.email.trim()}> as ${form.appRole}`,
+        changes: describeFields([
+          { label: "name", value: form.name.trim() },
+          { label: "email", value: form.email.trim() },
+          { label: "phone", value: form.phone.trim() },
+          { label: "job title", value: form.jobTitle.trim() },
+          { label: "team", value: form.team.trim() },
+          { label: "role", value: form.appRole },
+          { label: "sites", value: form.siteIds.length },
+        ]),
+      }
     );
     setBusy(false);
     if (!result) return;

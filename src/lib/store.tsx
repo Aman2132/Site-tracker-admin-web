@@ -6,6 +6,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { toast } from "sonner";
 
 import * as admin from "./admin";
+import type { AuditFields } from "./admin";
+import { failureReason, wasRefused } from "./auditLog";
 import { firebase } from "./firebase";
 import { toInventory } from "./inventory";
 import { deriveCrew, settleSessions, toEvent, toPhoto, toSite } from "./live";
@@ -13,6 +15,7 @@ import { DAY, dayStart } from "./time";
 
 import type {
   ActivityEvent,
+  AdminView,
   AuditEntry,
   CrewMember,
   InventoryEntry,
@@ -65,6 +68,8 @@ interface LiveStore {
   inviteCrew: typeof admin.inviteCrew;
   resendInvite: typeof admin.resendInvite;
   deletePhotos: typeof admin.deletePhotos;
+  deletePerson: typeof admin.deletePerson;
+  deleteSite: typeof admin.deleteSite;
   addInventoryEntry: typeof admin.addInventoryEntry;
   updateInventoryEntry: typeof admin.updateInventoryEntry;
   deleteInventoryEntry: typeof admin.deleteInventoryEntry;
@@ -186,6 +191,8 @@ const ACTIONS = {
   inviteCrew: admin.inviteCrew,
   resendInvite: admin.resendInvite,
   deletePhotos: admin.deletePhotos,
+  deletePerson: admin.deletePerson,
+  deleteSite: admin.deleteSite,
   addInventoryEntry: admin.addInventoryEntry,
   updateInventoryEntry: admin.updateInventoryEntry,
   deleteInventoryEntry: admin.deleteInventoryEntry,
@@ -209,6 +216,22 @@ export function useAdminAudit(): { entries: AuditEntry[] | null; error: string |
   return { entries, error };
 }
 
+/** Newest page views, live. Superadmin only. Listens only while `enabled`, so the big log isn't read unless someone is looking at it. */
+export const VIEWS_LIMIT = 1000;
+export function useAdminViews(enabled: boolean): { entries: AdminView[] | null; error: string | null } {
+  const [entries, setEntries] = useState<AdminView[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    return onSnapshot(
+      query(collection(firebase().db, "adminViews"), orderBy("at", "desc"), limit(VIEWS_LIMIT)),
+      snap => setEntries(snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<AdminView, "id">) }))),
+      e => setError(e.message)
+    );
+  }, [enabled]);
+  return { entries, error };
+}
+
 export function useLiveStore(): LiveStore {
   const store = useContext(LiveStoreContext);
   if (!store) throw new Error("useLiveStore must be used inside LiveStoreProvider");
@@ -223,28 +246,46 @@ export function useNow(): number {
  * Runs an admin action and reports a failure as a toast. Resolves with `{ value }`, or null when it failed.
  * Every successful action is also written to the superadmin-only audit trail (adminAudit), so all
  * admin edits are attributable without each action logging itself. Pass `audit` to say what was
- * touched and to attach the admin's note.
+ * touched and to attach the admin's note; as a function of the result it can also reword the line.
  */
 export async function attempt<T>(
   label: string,
   work: () => Promise<T>,
-  audit: AuditDetails = {}
+  audit: AuditDetails | ((value: T) => AuditDetails) = {}
 ): Promise<{ value: T } | null> {
   try {
     const value = await work();
-    void admin.logAdminAction(label, audit, actorName());
+    // A function lets the audit line describe the outcome (e.g. how many records a cleanup deleted).
+    const details = typeof audit === "function" ? audit(value) : audit;
+    const { label: relabel, ...rest } = details; // `label` is for the line only; the audit rules accept no extra keys
+    void admin.logAdminAction(relabel ?? label, { kind: "change", ...rest }, actorName());
     return { value };
   } catch (e) {
     console.warn(`[admin] ${label} failed —`, e);
     toast.error(`${label} failed`, { description: e instanceof Error ? e.message : "Something went wrong." });
+    // A failed or refused action is logged too, with what was attempted and why it didn't happen.
+    const attempted: AuditFields = {};
+    if (typeof audit !== "function") {
+      const { targetType, targetId, note, changes } = audit;
+      Object.assign(attempted, { targetType, targetId, note, changes });
+    }
+    void admin.logAdminAction(
+      label,
+      { ...attempted, kind: "failed", reason: `${wasRefused(e) ? "Refused: " : ""}${failureReason(e)}` },
+      actorName()
+    );
     return null;
   }
 }
 
-export interface AuditDetails {
-  targetType?: string;
-  targetId?: string;
-  note?: string;
+/** Logs something that isn't a write (an export, a download) as the signed-in admin. Never throws. */
+export function logAction(action: string, details: AuditFields = {}) {
+  void admin.logAdminAction(action, details, actorName());
+}
+
+export interface AuditDetails extends AuditFields {
+  /** Replaces the action's label in the audit line (used when the outcome is only known afterwards). */
+  label?: string;
 }
 
 /** The signed-in admin's profile name, kept current by LiveStoreProvider for the audit trail. */

@@ -1,5 +1,6 @@
 "use client";
 
+import { describePhotoDeletion } from "@/lib/auditText";
 import { CheckSquare, Check, Crosshair, Download, Film, ImageIcon, Images, Search, Trash2, UserRound, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
@@ -43,7 +44,7 @@ function dayLabel(day: number) {
 
 export function PhotosView({ initialSite }: { initialSite?: string }) {
   const { photos, sites, crew, deletePhotos } = useLiveStore();
-  const { personById } = useLookups();
+  const { personById, siteById } = useLookups();
   const now = useNow();
   const [site, setSite] = useState<string>(() => (initialSite && sites.some(s => s.id === initialSite) ? initialSite : defaultSiteAmong(sites)));
   const [person, setPerson] = useState("all");
@@ -104,7 +105,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
     const outcome = await attempt("Deleting photos", () => deletePhotos(pendingDelete), {
       targetType: "photo",
       targetId: pendingDelete.length === 1 ? pendingDelete[0].id : undefined,
-      note: `${pendingDelete.length} photo(s)`,
+      changes: describePhotoDeletion(pendingDelete, id => personById.get(id)?.name, id => siteById.get(id)?.name),
     });
     setDeleting(false);
     setPendingDelete([]);

@@ -1,5 +1,6 @@
 "use client";
 
+import { describeFields } from "@/lib/auditLog";
 import { Bell, Building2, Check, KeyRound, LogOut, Monitor, Moon, Sun } from "lucide-react";
 import { motion } from "motion/react";
 import { useTheme } from "next-themes";
@@ -86,7 +87,7 @@ export function SettingsView() {
 
   const changePassword = async () => {
     // Same Firebase email as an invite: a link to set a new password, sent to the signed-in admin.
-    if (await attempt("Sending a password reset", () => resendInvite(admin.email)))
+    if (await attempt("Sending a password reset", () => resendInvite(admin.email), { targetType: "person", targetId: admin.uid, changes: describeFields([{ label: "sent to", value: admin.email }]) }))
       toast.success("Check your email", { description: `A link to set a new password was sent to ${admin.email}.` });
   };
 

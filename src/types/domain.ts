@@ -107,6 +107,23 @@ export interface AuditEntry {
   targetType?: string;
   targetId?: string;
   note?: string;
+  /** Absent on older entries, which are all changes. */
+  kind?: "change" | "auth" | "failed" | "export";
+  /** Before → after for an edit, or what a deleted record held. */
+  changes?: string;
+  /** Why a failed or refused action didn't happen. */
+  reason?: string;
+  at: number;
+}
+
+/** One page opened (or one link that left the dashboard) by an admin. */
+export interface AdminView {
+  id: string;
+  actorId: string;
+  actorName: string;
+  path: string;
+  title: string;
+  kind: "view" | "external";
   at: number;
 }
 
