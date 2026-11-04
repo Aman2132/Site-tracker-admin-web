@@ -9,6 +9,8 @@ import {
   deleteField,
   doc,
   getFirestore,
+  increment,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -19,6 +21,7 @@ import { CHANGES_MAX, REASON_MAX, type AuditKind } from "./auditLog";
 import { FIREBASE_CONFIG, firebase } from "./firebase";
 
 import type { AppRole, EventKind, InventoryChanges, SessionEndReason, SitePhoto, SiteStatus } from "../types/domain";
+import { allocationProblem, availableAtSite, availableToAllocate, usageProblem } from "./projectInventory";
 
 /**
  * Everything the dashboard writes. Each function is one admin action; the
@@ -28,10 +31,39 @@ import type { AppRole, EventKind, InventoryChanges, SessionEndReason, SitePhoto,
 
 export interface NewSiteInput {
   name: string;
+  projectId?: string;
   manager: string;
   status: SiteStatus;
   color: string;
   crewIds: string[];
+}
+
+export interface NewProjectInput {
+  name: string;
+  manager: string;
+  status: SiteStatus;
+  color: string;
+}
+
+export interface ProjectStockInput {
+  projectId: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  note?: string;
+}
+
+export interface SiteAllocationInput {
+  projectItemId: string;
+  siteId: string;
+  quantity: number;
+}
+
+export interface InventoryUsageInput {
+  allocationId: string;
+  quantity: number;
+  note?: string;
+  proofPhotoIds?: string[];
 }
 
 export interface NewCrewInput {
@@ -73,6 +105,7 @@ export async function createSite(input: NewSiteInput): Promise<string> {
     status: input.status,
     manager: input.manager,
     color: input.color,
+    ...(input.projectId ? { projectId: input.projectId } : {}),
     startedAt: Date.now(),
     createdAt: serverTimestamp(),
   });
@@ -81,8 +114,114 @@ export async function createSite(input: NewSiteInput): Promise<string> {
   return ref.id;
 }
 
+/** Creates the parent record that groups several working sites. */
+export async function createProject(input: NewProjectInput): Promise<string> {
+  const ref = await addDoc(collection(firebase().db, "projects"), {
+    name: input.name,
+    code: siteCode(input.name),
+    status: input.status,
+    manager: input.manager,
+    color: input.color,
+    startedAt: Date.now(),
+    createdAt: serverTimestamp(),
+  });
+  await logEvent(`Project created — ${input.name}`, "site");
+  return ref.id;
+}
+
+/** Adds stock to a project. It is not selectable by crew until allocated to a site. */
+export async function addProjectStock(input: ProjectStockInput): Promise<string> {
+  const ref = await addDoc(collection(firebase().db, "projectInventory"), {
+    projectId: input.projectId,
+    name: input.name.trim().replace(/\s+/g, " "),
+    unit: input.unit.trim(),
+    quantity: input.quantity,
+    allocatedQuantity: 0,
+    usedQuantity: 0,
+    ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+    receivedAt: Date.now(),
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+/**
+ * Reserves project stock at a site. The transaction prevents an owner from
+ * allocating more than the project has remaining when two edits overlap.
+ */
+export async function allocateProjectStock(input: SiteAllocationInput): Promise<string> {
+  const { db } = firebase();
+  const allocationRef = doc(collection(db, "siteInventory"));
+  await runTransaction(db, async transaction => {
+    const itemRef = doc(db, "projectInventory", input.projectItemId);
+    const itemSnap = await transaction.get(itemRef);
+    if (!itemSnap.exists()) throw new Error("That project item no longer exists.");
+    const item = itemSnap.data();
+    const available = availableToAllocate({ quantity: Number(item.quantity ?? 0), allocatedQuantity: Number(item.allocatedQuantity ?? 0) });
+    const problem = allocationProblem(available, input.quantity);
+    if (problem) throw new Error(problem);
+    transaction.update(itemRef, { allocatedQuantity: increment(input.quantity) });
+    transaction.set(allocationRef, {
+      projectId: String(item.projectId ?? ""),
+      projectItemId: input.projectItemId,
+      siteId: input.siteId,
+      name: String(item.name ?? ""),
+      unit: String(item.unit ?? ""),
+      quantity: input.quantity,
+      usedQuantity: 0,
+      allocatedAt: Date.now(),
+      createdAt: serverTimestamp(),
+    });
+  });
+  return allocationRef.id;
+}
+
+/**
+ * Records consumption at a site. This is the authoritative no-overdraw gate:
+ * it increments both the site allocation and project roll-up in one atomic
+ * transaction, and writes an append-only record with any proof photo ids.
+ */
+export async function recordInventoryUsage(input: InventoryUsageInput, actor: { id: string; name: string; role: "crew" | "admin" }): Promise<string> {
+  const { db } = firebase();
+  const usageRef = doc(collection(db, "inventoryUsage"));
+  await runTransaction(db, async transaction => {
+    const allocationRef = doc(db, "siteInventory", input.allocationId);
+    const allocationSnap = await transaction.get(allocationRef);
+    if (!allocationSnap.exists()) throw new Error("That site allocation no longer exists.");
+    const allocation = allocationSnap.data();
+    const available = availableAtSite({ quantity: Number(allocation.quantity ?? 0), usedQuantity: Number(allocation.usedQuantity ?? 0) });
+    const problem = usageProblem(available, input.quantity);
+    if (problem) throw new Error(problem);
+    const projectItemRef = doc(db, "projectInventory", String(allocation.projectItemId ?? ""));
+    transaction.update(allocationRef, { usedQuantity: increment(input.quantity) });
+    transaction.update(projectItemRef, { usedQuantity: increment(input.quantity) });
+    transaction.set(usageRef, {
+      projectId: String(allocation.projectId ?? ""),
+      projectItemId: String(allocation.projectItemId ?? ""),
+      allocationId: input.allocationId,
+      siteId: String(allocation.siteId ?? ""),
+      name: String(allocation.name ?? ""),
+      unit: String(allocation.unit ?? ""),
+      quantity: input.quantity,
+      ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+      proofPhotoIds: input.proofPhotoIds ?? [],
+      actorId: actor.id,
+      actorName: actor.name,
+      actorRole: actor.role,
+      at: Date.now(),
+      createdAt: serverTimestamp(),
+    });
+  });
+  return usageRef.id;
+}
+
 export async function setSiteStatus(siteId: string, status: SiteStatus): Promise<void> {
   await updateDoc(doc(firebase().db, "sites", siteId), { status });
+}
+
+/** Moves an unallocated site to a project, or clears its project for legacy sites. */
+export async function setSiteProject(siteId: string, projectId?: string): Promise<void> {
+  await updateDoc(doc(firebase().db, "sites", siteId), { projectId: projectId || deleteField() });
 }
 
 /** Adds and removes a site on several people at once. */

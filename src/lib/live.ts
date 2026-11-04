@@ -7,6 +7,7 @@ import type {
   PersonDoc,
   PositionDoc,
   PresenceSession,
+  Project,
   Site,
   SitePhoto,
   SiteStatus,
@@ -121,6 +122,20 @@ const initials = (name: string) =>
 
 export function toSite(id: string, data: Record<string, unknown>, now: number): Site {
   const name = typeof data.name === "string" ? data.name : "Unnamed site";
+  return {
+    id,
+    name,
+    code: typeof data.code === "string" && data.code ? data.code : initials(name),
+    status: (typeof data.status === "string" ? data.status : "active") as SiteStatus,
+    startedAt: toMillis(data.startedAt ?? data.createdAt, now),
+    manager: typeof data.manager === "string" ? data.manager : "",
+    color: typeof data.color === "string" ? data.color : "#1c4ff0",
+    projectId: typeof data.projectId === "string" && data.projectId ? data.projectId : undefined,
+  };
+}
+
+export function toProject(id: string, data: Record<string, unknown>, now: number): Project {
+  const name = typeof data.name === "string" ? data.name : "Unnamed project";
   return {
     id,
     name,

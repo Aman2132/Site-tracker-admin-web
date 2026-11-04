@@ -21,9 +21,10 @@ const SITE_COLORS = ["#1c4ff0", "#0f9d58", "#a142f4", "#e2670f", "#12b5cb", "#d9
 /** A site is a name, a status and its crew — it has no location of its own. */
 export function CreateSiteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const router = useRouter();
-  const { crew, sites, createSite } = useLiveStore();
+  const { crew, sites, projects, createSite } = useLiveStore();
   const [form, setForm] = useState<NewSiteInput>({
     name: "",
+    projectId: projects[0]?.id,
     manager: "",
     status: "planning",
     color: SITE_COLORS[sites.length % SITE_COLORS.length],
@@ -86,6 +87,20 @@ export function CreateSiteDialog({ open, onOpenChange }: { open: boolean; onOpen
             />
           </Field>
 
+          <Field label="Project" hint="Sites can be grouped under one project for stock, usage and reporting.">
+            <div className="flex flex-wrap gap-2">
+              {projects.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Create a project first, then add its sites.</p>
+              ) : (
+                projects.map(project => (
+                  <ChoiceChip key={project.id} selected={form.projectId === project.id} onClick={() => set("projectId", project.id)}>
+                    {project.name}
+                  </ChoiceChip>
+                ))
+              )}
+            </div>
+          </Field>
+
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label="Status">
               <div className="flex flex-wrap gap-2">
@@ -144,7 +159,7 @@ export function CreateSiteDialog({ open, onOpenChange }: { open: boolean; onOpen
             <Button variant="outline" size="lg" className="flex-1 rounded-xl" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button size="lg" className="flex-1 rounded-xl shadow-glow" onClick={submit} disabled={busy}>
+            <Button size="lg" className="flex-1 rounded-xl shadow-glow" onClick={submit} disabled={busy || projects.length === 0}>
               {busy ? <Loader2 className="animate-spin" /> : <Sparkles />} Create site
             </Button>
           </div>

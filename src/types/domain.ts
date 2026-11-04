@@ -14,7 +14,18 @@ export type PresenceStatus = "online" | "idle" | "offline" | "invited" | "deacti
 
 export type SiteStatus = "active" | "planning" | "paused" | "completed";
 
-/** A project: a name and the crew assigned to it. Deliberately has no location. */
+/** A contract or job that can contain several sites. Projects deliberately have no location. */
+export interface Project {
+  id: string;
+  name: string;
+  code: string;
+  status: SiteStatus;
+  startedAt: number;
+  manager: string;
+  color: string;
+}
+
+/** One working location within a project. */
 export interface Site {
   id: string;
   name: string;
@@ -24,6 +35,8 @@ export interface Site {
   manager: string;
   /** Visual accent for charts and pins. */
   color: string;
+  /** Absent only for older, ungrouped sites. */
+  projectId?: string;
 }
 
 export interface CrewMember {
@@ -195,6 +208,50 @@ export interface InventoryUsage {
   quantity: number;
   at: number;
   note?: string;
+}
+
+/** Stock purchased or received for the whole project. It is allocated to sites before it can be used. */
+export interface ProjectInventoryItem {
+  id: string;
+  projectId: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  allocatedQuantity: number;
+  usedQuantity: number;
+  note?: string;
+  receivedAt: number;
+}
+
+/** The quantity of one project item reserved for one site. */
+export interface SiteInventoryAllocation {
+  id: string;
+  projectId: string;
+  projectItemId: string;
+  siteId: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  usedQuantity: number;
+  allocatedAt: number;
+}
+
+/** An append-only consumption record. `proofPhotoIds` point at the normal photos collection. */
+export interface InventoryUsageRecord {
+  id: string;
+  projectId: string;
+  siteId: string;
+  allocationId: string;
+  projectItemId: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  note?: string;
+  proofPhotoIds: string[];
+  actorId: string;
+  actorName: string;
+  actorRole: "crew" | "admin";
+  at: number;
 }
 
 /** What an owner can set when adding or correcting an entry. Admins may also correct `usedQuantity`. */

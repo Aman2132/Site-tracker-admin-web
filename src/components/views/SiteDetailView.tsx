@@ -1,7 +1,7 @@
 "use client";
 
 import { describeChanges } from "@/lib/auditLog";
-import { ArrowLeft, Building2, CalendarDays, ChevronDown, Clock, Crosshair, ImageIcon, Trash2, UserPlus, UserRound, Users } from "lucide-react";
+import { ArrowLeft, Building2, CalendarDays, ChevronDown, Clock, Crosshair, FolderKanban, ImageIcon, Trash2, UserPlus, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 import type { SiteStatus } from "@/types/domain";
 
 export function SiteDetailView({ id }: { id: string }) {
-  const { sites, roster: crew, sessions, photos, events, setSiteStatus, deleteSite } = useLiveStore();
+  const { sites, projects, siteInventory, roster: crew, sessions, photos, events, setSiteStatus, setSiteProject, deleteSite } = useLiveStore();
   const now = useNow();
   const { openAddCrew } = useDialogs();
   const assign = useTarget();
@@ -91,6 +91,23 @@ export function SiteDetailView({ id }: { id: string }) {
   const assigned = crew.filter(c => c.siteIds.includes(site.id) && c.status !== "deactivated");
   const here = crew.filter(c => isOnShift(c) && c.currentSiteId === site.id);
   const gallery = data.photos.slice(0, 8);
+  const project = projects.find(value => value.id === site.projectId);
+  const hasProjectStock = siteInventory.some(allocation => allocation.siteId === site.id);
+  const changeProject = (projectId?: string) => {
+    if (hasProjectStock) {
+      toast.error("This site has project stock", { description: "It cannot move projects while it has inventory allocations. Move or close those allocations first." });
+      return;
+    }
+    if (projectId === site.projectId) return;
+    const nextName = projectId ? projects.find(value => value.id === projectId)?.name ?? "project" : "No project";
+    void attempt("Updating project", () => setSiteProject(site.id, projectId), {
+      targetType: "site",
+      targetId: site.id,
+      changes: describeChanges([{ label: "project", before: project?.name, after: nextName }]),
+    }).then(result => {
+      if (result) toast.success("Site project updated", { description: `${site.name} is now under ${nextName}.` });
+    });
+  };
 
   return (
     <>
@@ -134,6 +151,18 @@ export function SiteDetailView({ id }: { id: string }) {
                 </div>
                 <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5 font-mono text-xs">{site.code}</span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger render={<button type="button" className="inline-flex items-center gap-1.5 font-semibold text-primary outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Change project" />}>
+                      <FolderKanban className="size-4" /> {project?.name ?? "No project"} <ChevronDown className="size-3.5" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-56">
+                      <DropdownMenuRadioGroup value={site.projectId ?? "none"} onValueChange={value => changeProject(value === "none" ? undefined : value)}>
+                        <DropdownMenuRadioItem value="none">No project</DropdownMenuRadioItem>
+                        {projects.map(value => <DropdownMenuRadioItem key={value.id} value={value.id}>{value.name}</DropdownMenuRadioItem>)}
+                      </DropdownMenuRadioGroup>
+                      {hasProjectStock && <p className="px-2 py-1.5 text-xs text-muted-foreground">Inventory allocations lock this site to its current project.</p>}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   {site.manager && <span className="inline-flex items-center gap-1.5"><UserRound className="size-4" /> {site.manager}</span>}
                   <span className="inline-flex items-center gap-1.5"><CalendarDays className="size-4" /> Since {formatDate(site.startedAt)}</span>
                 </div>

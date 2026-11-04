@@ -71,6 +71,8 @@ const TITLES: [RegExp, string][] = [
   [/^\/map/, "Live map"],
   [/^\/sites\/[^/]+/, "Site"],
   [/^\/sites/, "Sites"],
+  [/^\/projects\/[^/]+/, "Project"],
+  [/^\/projects/, "Projects"],
   [/^\/crew\/[^/]+/, "Crew profile"],
   [/^\/crew/, "Crew"],
   [/^\/photos/, "Photos"],
