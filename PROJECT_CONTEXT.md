@@ -36,7 +36,7 @@ Sibling repo: the Android app, `C:\Projects\Perso\Site-tracker` (Expo/React Nati
 
 ## Codebase Knowledge Graph (Graphify)
 
-- Structural graph & dependency report: [graphify-out/GRAPH_REPORT.md](graphify-out/GRAPH_REPORT.md) (when generated).
+- Structural graph & dependency report: [graphify-out/GRAPH_REPORT.md](graphify-out/GRAPH_REPORT.md) (1021 nodes, 3963 edges, 34 communities).
 - Interactive visualizer: `graphify-out/graph.html` (open in browser).
 - To generate/refresh the graph: `graphify . --code-only; graphify cluster-only .`.
 
@@ -56,5 +56,6 @@ behaviour, finish the reply with one line, e.g.:
 
 | Date | Change | Docs updated |
 |---|---|---|
+| 2026-11-04 | Generated Graphify knowledge graph (`graph.json`, `GRAPH_REPORT.md`, 1021 nodes, 3963 edges) under git Option B. | yes |
 | 2026-11-04 | Created `DOCUMENTATION.md`, `PROJECT_CONTEXT.md`; added pointer in `AGENTS.md`. Full codebase review (dashboard + Android app at `origin/main`). | yes (initial) |
 
