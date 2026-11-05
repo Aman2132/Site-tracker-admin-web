@@ -50,7 +50,7 @@ export function deriveCrew(people: PersonDoc[], positions: Record<string, Positi
       id: person.id,
       name: person.name,
       email: person.email ?? "",
-      phone: person.phone ?? "",
+      phone: person.phone ?? person.phoneNumber ?? person.mobile ?? "",
       jobTitle: person.role,
       team: person.team ?? "",
       appRole: person.appRole,
@@ -169,6 +169,8 @@ export function toPhoto(id: string, data: Record<string, unknown>): SitePhoto {
     lng: Number(data.lng ?? 0),
     accuracy: Math.round(Number(data.accuracy ?? 0)),
     plusCode: String(data.plusCode ?? ""),
+    altitude: typeof data.altitude === "number" ? Math.round(data.altitude * 10) / 10 : undefined,
+    heading: typeof data.heading === "number" ? Math.round(data.heading) : undefined,
   };
 }
 

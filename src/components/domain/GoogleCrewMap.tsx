@@ -11,6 +11,7 @@ import {
   START_CENTER,
   START_ZOOM,
   hasPosition,
+  photoPinElement,
   pinElement,
   popupFor,
   siteNamesFor,
@@ -28,6 +29,7 @@ interface MapState {
   map: google.maps.Map;
   info: google.maps.InfoWindow;
   markers: Map<string, google.maps.marker.AdvancedMarkerElement>;
+  photoMarkers: Map<string, google.maps.marker.AdvancedMarkerElement>;
   /** Latest popup content per person, read when their pin is clicked. */
   popups: Map<string, HTMLElement>;
   fitted: string | null;
@@ -41,6 +43,8 @@ interface MapState {
 export function GoogleCrewMap({
   crew,
   sites,
+  photos,
+  onSelectPhoto,
   fitKey,
   focusId,
   className,
@@ -68,7 +72,7 @@ export function GoogleCrewMap({
           mapTypeControl: true,
           streetViewControl: false,
         });
-        stateRef.current = { map, info: new InfoWindow(), markers: new Map(), popups: new Map(), fitted: null };
+        stateRef.current = { map, info: new InfoWindow(), markers: new Map(), photoMarkers: new Map(), popups: new Map(), fitted: null };
         setReady(true);
       } catch (error) {
         console.warn("[map] Google Maps failed —", error);
@@ -83,6 +87,7 @@ export function GoogleCrewMap({
       if (state) {
         state.info.close();
         for (const marker of state.markers.values()) detach(marker);
+        for (const marker of state.photoMarkers.values()) detach(marker);
       }
       stateRef.current = null;
       setReady(false);
@@ -152,6 +157,39 @@ export function GoogleCrewMap({
     state.info.setContent(popup);
     state.info.open({ map: state.map, anchor: marker });
   }, [ready, focusId]);
+
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    const { map, photoMarkers } = state;
+    const validPhotos = (photos ?? []).filter(p => (p.lat !== 0 || p.lng !== 0) && !isNaN(p.lat) && !isNaN(p.lng));
+
+    for (const [id, marker] of photoMarkers) {
+      if (!validPhotos.some(p => p.id === id)) {
+        detach(marker);
+        photoMarkers.delete(id);
+      }
+    }
+
+    for (const p of validPhotos) {
+      const position = { lat: p.lat, lng: p.lng };
+      const existing = photoMarkers.get(p.id);
+      if (existing) {
+        existing.position = position;
+      } else {
+        const content = photoPinElement(p);
+        content.style.transform = "translateY(50%)";
+        const marker = new google.maps.marker.AdvancedMarkerElement({
+          map,
+          position,
+          content,
+          title: p.task || "Photo",
+        });
+        marker.addListener("gmp-click", () => onSelectPhoto?.(p));
+        photoMarkers.set(p.id, marker);
+      }
+    }
+  }, [ready, photos, onSelectPhoto]);
 
   return <div ref={containerRef} className={cn("isolate z-0 overflow-hidden rounded-2xl bg-muted", className)} />;
 }

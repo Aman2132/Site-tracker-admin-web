@@ -1,9 +1,10 @@
 "use client";
 
-import { Building2, ChevronRight, List, MapPinOff } from "lucide-react";
+import { Building2, Camera, ChevronRight, List, MapPinOff } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { CrewMap } from "@/components/domain/CrewMap";
+import { Lightbox } from "@/components/domain/Lightbox";
 import { PageHeader } from "@/components/domain/PageHeader";
 import { PersonAvatar } from "@/components/domain/PersonAvatar";
 import { SegmentedControl } from "@/components/domain/SegmentedControl";
@@ -82,12 +83,14 @@ function CrewList({ members, focusId, onFocus }: { members: CrewMember[]; focusI
 
 /** Everyone's last known position, filterable by site (the crew assigned to it). Read-only. */
 export function LiveMapView() {
-  const { roster, sites } = useLiveStore();
+  const { roster, sites, photos } = useLiveStore();
   const { siteById } = useLookups();
   const [site, setSite] = useState(() => defaultSiteAmong(sites));
   const [status, setStatus] = useState<StatusFilter>("all");
   const [focusId, setFocusId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  const [showPhotos, setShowPhotos] = useState(false);
+  const [openPhotoId, setOpenPhotoId] = useState<string | null>(null);
 
   const inSite = useMemo(
     () =>
@@ -106,6 +109,13 @@ export function LiveMapView() {
     [inSite, status]
   );
   const located = members.filter(hasLocation);
+  const sitePhotos = useMemo(
+    () =>
+      photos
+        .filter(p => (p.lat !== 0 || p.lng !== 0) && (site === "all" || p.siteId === site))
+        .slice(0, 50),
+    [photos, site]
+  );
 
   return (
     <>
@@ -143,8 +153,24 @@ export function LiveMapView() {
             { value: "offline", label: "Offline", count: counts.offline },
           ]}
         />
-        <div className="text-sm text-muted-foreground sm:ml-auto">
-          {located.length} of {members.length} on the map
+        <div className="flex items-center gap-2.5 sm:ml-auto">
+          <Button
+            variant={showPhotos ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowPhotos(v => !v)}
+            className="gap-1.5 rounded-xl text-xs font-semibold"
+          >
+            <Camera className="size-3.5" />
+            Photos
+            {sitePhotos.length > 0 && (
+              <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.2 text-[10px]">
+                {sitePhotos.length}
+              </span>
+            )}
+          </Button>
+          <div className="text-sm text-muted-foreground">
+            {located.length} of {members.length} on the map
+          </div>
         </div>
       </div>
 
@@ -154,7 +180,15 @@ export function LiveMapView() {
           <CrewList members={members} focusId={focusId} onFocus={setFocusId} />
         </div>
         <div className="relative">
-          <CrewMap crew={members} sites={sites} fitKey={`${site}|${status}`} focusId={focusId} className="h-[70dvh] min-h-[420px]" />
+          <CrewMap
+            crew={members}
+            sites={sites}
+            photos={showPhotos ? sitePhotos : undefined}
+            onSelectPhoto={photo => setOpenPhotoId(photo.id)}
+            fitKey={`${site}|${status}|${showPhotos}`}
+            focusId={focusId}
+            className="h-[70dvh] min-h-[420px]"
+          />
           <Button
             size="lg"
             className="absolute bottom-4 left-1/2 z-[500] -translate-x-1/2 rounded-full px-5 shadow-lift lg:hidden"
@@ -185,6 +219,15 @@ export function LiveMapView() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {openPhotoId && (
+        <Lightbox
+          photos={sitePhotos}
+          openId={openPhotoId}
+          onClose={() => setOpenPhotoId(null)}
+          onChange={setOpenPhotoId}
+        />
+      )}
     </>
   );
 }

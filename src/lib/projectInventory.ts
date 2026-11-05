@@ -1,4 +1,47 @@
-import type { InventoryUsageRecord, ProjectInventoryItem, SiteInventoryAllocation } from "../types/domain.ts";
+import type { InventoryUsageRecord, Project, ProjectInventoryItem, Site, SiteInventoryAllocation } from "../types/domain.ts";
+
+/** Normalises a project or site name for case- and whitespace-insensitive uniqueness checks. */
+export const normalizeEntityName = (name: string): string =>
+  name.trim().replace(/\s+/g, " ").toLowerCase();
+
+/** Validates a project name: at least 3 chars and unique across all projects. */
+export function projectNameProblem(
+  name: string,
+  existingProjects: Pick<Project, "id" | "name">[],
+  excludeId?: string
+): string | null {
+  const trimmed = name.trim();
+  if (trimmed.length < 3) return "Give the project a name (at least 3 characters)";
+  const norm = normalizeEntityName(trimmed);
+  if (existingProjects.some(p => p.id !== excludeId && normalizeEntityName(p.name) === norm)) {
+    return "A project with this name already exists";
+  }
+  return null;
+}
+
+/** Validates a site name: at least 3 chars and unique across existing and queued sites. */
+export function siteNameProblem(
+  name: string,
+  existingSites: Pick<Site, "id" | "name">[],
+  pendingSiteNames: string[] = [],
+  excludeId?: string
+): string | null {
+  const trimmed = name.trim();
+  if (trimmed.length < 3) return "Give the site a name your crew will recognise";
+  const norm = normalizeEntityName(trimmed);
+  if (existingSites.some(s => s.id !== excludeId && normalizeEntityName(s.name) === norm)) {
+    return "A site with this name already exists";
+  }
+  if (pendingSiteNames.some(pending => normalizeEntityName(pending) === norm)) {
+    return "You already added a site with this name";
+  }
+  return null;
+}
+
+/** One site can belong to at most one project: only unassigned sites (or sites already in `targetProjectId`) may attach. */
+export function canAttachSiteToProject(site: Pick<Site, "projectId">, targetProjectId?: string): boolean {
+  return !site.projectId || (targetProjectId != null && site.projectId === targetProjectId);
+}
 
 /** Inventory arithmetic shared by the dashboard and the future mobile integration. */
 export const EPSILON = 1e-9;

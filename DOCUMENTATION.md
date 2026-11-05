@@ -221,7 +221,7 @@ estimates**, computed in memory and never stored. Hours (`insights.workedMs`) me
 duplicate check-in can't double count; shifts under 1 min don't count; a day >12 h is flagged for correction; arriving after
 09:15 Nepal time counts as late.
 
-Other mappers: `toSite`, `toProject`, `toPhoto` (defaults 1600×1200 when size is missing, thumb falls back to original),
+Other mappers: `toSite`, `toProject`, `toPhoto` (defaults 1600×1200 when size is missing, thumb falls back to original, maps altitude and heading),
 `toEvent` (guesses `kind` from the text for old events without a `type`).
 
 `roster` = `crew` filtered to `appRole === "worker"` — every headcount uses it; `crew` includes admins (for names/lookups).
@@ -233,17 +233,17 @@ Navigation lives in `components/layout/nav.ts`. Page files are in `src/app/(dash
 | Route | View | What it does | Who |
 |---|---|---|---|
 | `/` | `OverviewView` | Today at a glance: online, hours & photos (today/week), attendance trend, "needs attention", per-site headcount, latest photos, live activity | admin |
-| `/map` | `LiveMapView` | Last position of every person; filter by site/status; Google or Leaflet map | admin |
+| `/map` | `LiveMapView` | Last position of every person; filter by site/status; optional Photos layer showing recent photo thumbnails; Google or Leaflet map | admin |
 | `/sites`, `/sites/[id]` | `SitesView`, `SiteDetailView` | Site cards; detail has assigned crew (assign sheet), photos, activity, status change, crew map | admin; **delete site: superadmin** |
 | `/projects`, `/projects/[id]` | `ProjectsView`, `ProjectDetailView` | **Uncommitted.** Create project; add project stock, allocate to site, record usage (with proof photos), usage history | admin |
 | `/crew`, `/crew/[id]` | `CrewView`, `CrewProfileView` | Roster, invite (creates account + emails set-password link), deactivate/reactivate, assign sites; profile with 7-day online/offline timeline, last location | admin; **role change & delete person: superadmin** |
-| `/photos` | `PhotosView` | Geotagged gallery filtered by site/person/date/type; thumbnails first, original in lightbox; multi-select delete | admin |
+| `/photos` | `PhotosView` | Geotagged gallery filtered by site/person/date/type; thumbnails with hover download; original in lightbox with direct download & PhotoLocationMap; multi-select delete & structured ZIP export (by Project/Site) | admin |
 | `/inventory` | `InventoryView` | Crew-logged deliveries per site, totals, add/edit/delete ("Legacy inventory records" section) | admin |
 | `/attendance` | `AttendanceView` | Crew × day grid, per-day timeline, edit a session (note → audit log), **timesheet CSV** (logged as an export) | admin |
 | `/activity` | `ActivityView` | Event history by type/site | admin |
 | `/admins` | `AdminsView` | Who has admin access; grant/revoke | **superadmin** |
 | `/audit` | `AuditLogView` | Every admin edit, sign-in, export and failed/refused action | **superadmin** |
-| `/storage` | `StorageView` | Firestore (estimated) / RTDB / photo-file usage vs free-tier limits; **Clean up**; **Reset all data** | admin sees meters; cleanup+reset superadmin |
+| `/storage` | `StorageView` | Firestore (estimated) / RTDB / photo-file usage vs free-tier limits; **Clean up** (flexible presets 1h-365d, calendar cutoff & date range); **Reset all data** | admin sees meters; cleanup+reset superadmin |
 | `/settings` | `SettingsView` | Account, per-browser prefs (default site, browser notifications for signal-lost / low battery while the tab is open), theme | admin |
 
 Extras: **Command palette** (Ctrl/⌘K: jump to page/person/site or start a create flow), sidebar **storage meter**

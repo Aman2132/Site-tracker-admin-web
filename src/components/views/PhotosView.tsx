@@ -1,7 +1,7 @@
 "use client";
 
 import { describePhotoDeletion } from "@/lib/auditText";
-import { CheckSquare, Check, Crosshair, Download, Film, ImageIcon, Images, Search, Trash2, UserRound, X } from "lucide-react";
+import { CheckSquare, Check, Crosshair, Download, Film, ImageIcon, Images, Loader2, Search, Trash2, UserRound, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -28,6 +28,7 @@ import { formatDay } from "@/lib/format";
 import { DAY, dayStart } from "@/lib/time";
 import { attempt, useLiveStore, useLookups, useNow } from "@/lib/store";
 import { defaultSiteAmong } from "@/lib/prefs";
+import { exportPhotosToZip } from "@/lib/photoExport";
 import { cn } from "@/lib/utils";
 
 import type { SitePhoto } from "@/types/domain";
@@ -43,7 +44,9 @@ function dayLabel(day: number) {
 }
 
 export function PhotosView({ initialSite }: { initialSite?: string }) {
-  const { photos, sites, crew, deletePhotos } = useLiveStore();
+  const { photos, sites, crew, projects, deletePhotos } = useLiveStore();
+  const [exporting, setExporting] = useState(false);
+
   const { personById, siteById } = useLookups();
   const now = useNow();
   const [site, setSite] = useState<string>(() => (initialSite && sites.some(s => s.id === initialSite) ? initialSite : defaultSiteAmong(sites)));
@@ -57,6 +60,33 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
   /** Photos waiting on the delete confirmation. */
   const [pendingDelete, setPendingDelete] = useState<SitePhoto[]>([]);
   const [deleting, setDeleting] = useState(false);
+
+  const handleExport = async (photosToExport: SitePhoto[]) => {
+    if (photosToExport.length === 0) {
+      toast.error("No photos to export.");
+      return;
+    }
+    setExporting(true);
+    try {
+      toast.loading(`Starting export of ${photosToExport.length} photos…`, { id: "export-zip" });
+      await exportPhotosToZip(photosToExport, {
+        sites,
+        projects,
+        crew,
+        onProgress: p => {
+
+          toast.loading(`${p.message} (${p.percent}%)`, { id: "export-zip" });
+        },
+      });
+      toast.success(`Export complete: ${photosToExport.length} photos zipped!`, { id: "export-zip" });
+    } catch (err) {
+      console.error("Export failed:", err);
+      toast.error(err instanceof Error ? err.message : "Export failed.", { id: "export-zip" });
+    } finally {
+      setExporting(false);
+
+    }
+  };
 
   /** Every filter but the site: the site chips count from this, so each chip shows what clicking it would show. */
   const beforeSite = useMemo(() => {
@@ -136,9 +166,18 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
                   <CheckSquare /> Select all {filtered.length}
                 </Button>
                 <Button
+                  variant="outline"
+                  size="lg"
+                  className="bg-card"
+                  disabled={selected.size === 0 || exporting}
+                  onClick={() => handleExport(filtered.filter(p => selected.has(p.id)))}
+                >
+                  {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download />} Export {selected.size || ""}
+                </Button>
+                <Button
                   variant="destructive"
                   size="lg"
-                  disabled={selected.size === 0}
+                  disabled={selected.size === 0 || exporting}
                   onClick={() => setPendingDelete(filtered.filter(p => selected.has(p.id)))}
                 >
                   <Trash2 /> Delete {selected.size || ""}
@@ -156,9 +195,10 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
                   variant="outline"
                   size="lg"
                   className="bg-card"
-                  onClick={() => toast.success("Export started", { description: `${filtered.length} originals will be zipped with their GPS metadata.` })}
+                  disabled={filtered.length === 0 || exporting}
+                  onClick={() => handleExport(filtered)}
                 >
-                  <Download /> Export {filtered.length}
+                  {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download />} Export {filtered.length}
                 </Button>
               </>
             )}
@@ -281,7 +321,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
         <EmptyState icon={<Images className="size-6" />} title="No photos match" description="Try widening the date range or clearing filters." />
       ) : (
         <div className="space-y-8">
-          {groups.map(([day, items]) => (
+          {groups.map(([day, items], groupIndex) => (
             <section key={day}>
               <div className="sticky top-[72px] z-10 -mx-2 mb-3 flex items-center gap-3 bg-background/85 px-2 py-2 backdrop-blur">
                 <h2 className="text-base font-semibold">{dayLabel(day)}</h2>
@@ -301,6 +341,7 @@ export function PhotosView({ initialSite }: { initialSite?: string }) {
                     key={p.id}
                     photo={p}
                     index={i}
+                    priority={groupIndex === 0 && i < 2}
                     onOpen={ph => setOpenId(ph.id)}
                     selecting={selecting}
                     selected={selected.has(p.id)}

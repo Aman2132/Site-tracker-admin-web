@@ -93,6 +93,8 @@ export interface SitePhoto {
   lat: number;
   lng: number;
   accuracy: number;
+  altitude?: number;
+  heading?: number;
   plusCode: string;
 }
 
@@ -164,6 +166,8 @@ export interface PersonDoc {
   siteIds?: string[];
   email?: string;
   phone?: string;
+  phoneNumber?: string;
+  mobile?: string;
   team?: string;
   invitedAt?: number;
 }

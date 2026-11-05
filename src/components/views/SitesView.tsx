@@ -161,7 +161,7 @@ export function SitesView() {
         title="Sites"
         description="Every project and the crew assigned to it."
         actions={
-          <Button size="lg" className="rounded-xl px-4 shadow-glow" onClick={openCreateSite}>
+          <Button size="lg" className="rounded-xl px-4 shadow-glow" onClick={() => openCreateSite()}>
             <Plus /> Create site
           </Button>
         }
@@ -201,7 +201,7 @@ export function SitesView() {
           title="No sites match"
           description="Try another filter, or create a new site."
           action={
-            <Button className="rounded-xl" onClick={openCreateSite}>
+            <Button className="rounded-xl" onClick={() => openCreateSite()}>
               <Plus /> Create site
             </Button>
           }

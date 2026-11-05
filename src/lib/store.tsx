@@ -79,6 +79,7 @@ interface LiveStore {
   setSiteCrew: typeof admin.setSiteCrew;
   setPersonSites: typeof admin.setPersonSites;
   setCrewActive: typeof admin.setCrewActive;
+  updatePersonDetails: typeof admin.updatePersonDetails;
   inviteCrew: typeof admin.inviteCrew;
   resendInvite: typeof admin.resendInvite;
   deletePhotos: typeof admin.deletePhotos;
@@ -219,6 +220,7 @@ const ACTIONS = {
   setSiteCrew: admin.setSiteCrew,
   setPersonSites: admin.setPersonSites,
   setCrewActive: admin.setCrewActive,
+  updatePersonDetails: admin.updatePersonDetails,
   inviteCrew: admin.inviteCrew,
   resendInvite: admin.resendInvite,
   deletePhotos: admin.deletePhotos,

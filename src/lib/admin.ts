@@ -8,6 +8,7 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  getDocs,
   getFirestore,
   increment,
   runTransaction,
@@ -21,7 +22,15 @@ import { CHANGES_MAX, REASON_MAX, type AuditKind } from "./auditLog";
 import { FIREBASE_CONFIG, firebase } from "./firebase";
 
 import type { AppRole, EventKind, InventoryChanges, SessionEndReason, SitePhoto, SiteStatus } from "../types/domain";
-import { allocationProblem, availableAtSite, availableToAllocate, usageProblem } from "./projectInventory";
+import {
+  allocationProblem,
+  availableAtSite,
+  availableToAllocate,
+  canAttachSiteToProject,
+  projectNameProblem,
+  siteNameProblem,
+  usageProblem,
+} from "./projectInventory";
 
 /**
  * Everything the dashboard writes. Each function is one admin action; the
@@ -38,7 +47,18 @@ export interface NewSiteInput {
   crewIds: string[];
 }
 
+export interface NewProjectSiteInput {
+  name: string;
+  manager?: string;
+  status?: SiteStatus;
+  color?: string;
+}
+
 export interface NewProjectInput {
+  /** Existing unassigned site ids to attach to this project. */
+  existingSiteIds?: string[];
+  /** Brand-new sites to create directly under this project. */
+  newSites?: NewProjectSiteInput[];
   name: string;
   manager: string;
   status: SiteStatus;
@@ -97,7 +117,16 @@ function siteCode(name: string): string {
   );
 }
 
+const SITE_PALETTE = ["#1c4ff0", "#0f9d58", "#a142f4", "#e2670f", "#12b5cb", "#d93025"];
+
 export async function createSite(input: NewSiteInput): Promise<string> {
+  const existingSnap = await getDocs(collection(firebase().db, "sites"));
+  const existingSites = existingSnap.docs
+    .filter(d => d.id !== "default")
+    .map(d => ({ id: d.id, name: String(d.data().name ?? "") }));
+  const nameErr = siteNameProblem(input.name, existingSites);
+  if (nameErr) throw new Error(nameErr);
+  input = { ...input, name: input.name.trim(), manager: input.manager.trim() };
   const { db } = firebase();
   const ref = await addDoc(collection(db, "sites"), {
     name: input.name,
@@ -116,20 +145,83 @@ export async function createSite(input: NewSiteInput): Promise<string> {
 
 /** Creates the parent record that groups several working sites. */
 export async function createProject(input: NewProjectInput): Promise<string> {
-  const ref = await addDoc(collection(firebase().db, "projects"), {
-    name: input.name,
-    code: siteCode(input.name),
+  const { db } = firebase();
+  const [projectSnap, siteSnap] = await Promise.all([
+    getDocs(collection(db, "projects")),
+    getDocs(collection(db, "sites")),
+  ]);
+
+  const existingProjects = projectSnap.docs.map(d => ({ id: d.id, name: String(d.data().name ?? "") }));
+  const nameErr = projectNameProblem(input.name, existingProjects);
+  if (nameErr) throw new Error(nameErr);
+
+  const existingSites = siteSnap.docs
+    .filter(d => d.id !== "default")
+    .map(d => ({ id: d.id, name: String(d.data().name ?? ""), projectId: d.data().projectId ? String(d.data().projectId) : undefined }));
+
+  const existingSiteMap = new Map(existingSites.map(s => [s.id, s]));
+  const existingSiteIds = input.existingSiteIds ?? [];
+  for (const sId of existingSiteIds) {
+    const found = existingSiteMap.get(sId);
+    if (!found) throw new Error(`Site with id "${sId}" does not exist.`);
+    if (!canAttachSiteToProject(found)) {
+      throw new Error(`Site "${found.name}" is already assigned to another project.`);
+    }
+  }
+
+  const newSites = input.newSites ?? [];
+  const pendingNames: string[] = [];
+  for (const ns of newSites) {
+    const sErr = siteNameProblem(ns.name, existingSites, pendingNames);
+    if (sErr) throw new Error(sErr);
+    pendingNames.push(ns.name.trim());
+  }
+
+  const batch = writeBatch(db);
+  const projectRef = doc(collection(db, "projects"));
+  const cleanName = input.name.trim();
+
+  batch.set(projectRef, {
+    name: cleanName,
+    code: siteCode(cleanName),
     status: input.status,
-    manager: input.manager,
+    manager: input.manager.trim(),
     color: input.color,
     startedAt: Date.now(),
     createdAt: serverTimestamp(),
   });
-  await logEvent(`Project created — ${input.name}`, "site");
-  return ref.id;
+
+  for (const sId of existingSiteIds) {
+    batch.update(doc(db, "sites", sId), { projectId: projectRef.id });
+  }
+
+  const createdSiteRefs: { ref: ReturnType<typeof doc>; name: string }[] = [];
+  newSites.forEach((ns, idx) => {
+    const siteRef = doc(collection(db, "sites"));
+    const trimmedSiteName = ns.name.trim();
+    batch.set(siteRef, {
+      name: trimmedSiteName,
+      code: siteCode(trimmedSiteName),
+      status: ns.status ?? "planning",
+      manager: ns.manager?.trim() ?? "",
+      color: ns.color ?? SITE_PALETTE[(existingSites.length + idx) % SITE_PALETTE.length],
+      projectId: projectRef.id,
+      startedAt: Date.now(),
+      createdAt: serverTimestamp(),
+    });
+    createdSiteRefs.push({ ref: siteRef, name: trimmedSiteName });
+  });
+
+  await batch.commit();
+
+  await logEvent(`Project created — ${cleanName}`, "site");
+  for (const s of createdSiteRefs) {
+    await logEvent(`Site created — ${s.name}`, "site", { siteId: s.ref.id });
+  }
+
+  return projectRef.id;
 }
 
-/** Adds stock to a project. It is not selectable by crew until allocated to a site. */
 export async function addProjectStock(input: ProjectStockInput): Promise<string> {
   const ref = await addDoc(collection(firebase().db, "projectInventory"), {
     projectId: input.projectId,
@@ -240,6 +332,22 @@ export async function setPersonSites(personId: string, siteIds: string[]): Promi
 export async function setCrewActive(personId: string, name: string, active: boolean): Promise<void> {
   await updateDoc(doc(firebase().db, "people", personId), { active });
   await logEvent(`${name} ${active ? "reactivated" : "deactivated"}`, "crew", { personId });
+}
+
+export interface PersonDetailsInput {
+  role?: string;
+  team?: string;
+  email?: string;
+  phone?: string;
+}
+
+export async function updatePersonDetails(personId: string, changes: PersonDetailsInput): Promise<void> {
+  const updates: Record<string, string> = {};
+  if (changes.role !== undefined) updates.role = changes.role.trim();
+  if (changes.team !== undefined) updates.team = changes.team.trim();
+  if (changes.email !== undefined) updates.email = changes.email.trim();
+  if (changes.phone !== undefined) updates.phone = changes.phone.trim();
+  await updateDoc(doc(firebase().db, "people", personId), updates);
 }
 
 /** 20 random characters. The person never sees it — they set their own through the reset email. */

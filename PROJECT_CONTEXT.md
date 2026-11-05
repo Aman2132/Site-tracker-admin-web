@@ -56,6 +56,10 @@ behaviour, finish the reply with one line, e.g.:
 
 | Date | Change | Docs updated |
 |---|---|---|
+| 2026-11-05 | Fixed ZIP export progress flood and re-render loop (throttled JSZip progress & toast updates); resolved PhotoThumb nested button hydration error and tuned LCP preloading. | yes |
+| 2026-11-05 | Added photo hover & Lightbox download buttons; wired bulk ZIP export with Project/Site folders & metadata; added flexible time & calendar cleanup in Storage. | yes |
+| 2026-11-05 | Added PhotoLocationMap (embedded mini-map with photo thumbnail pin, azimuth heading cone, and altitude) in Lightbox; added Photos layer toggle with thumbnail pins on LiveMapView. | yes |
+| 2026-11-05 | Updated SitePhoto domain model with altitude and heading fields matching Android app EXIF additions. | yes |
 | 2026-11-04 | Generated Graphify knowledge graph (`graph.json`, `GRAPH_REPORT.md`, 1021 nodes, 3963 edges) under git Option B. | yes |
 | 2026-11-04 | Created `DOCUMENTATION.md`, `PROJECT_CONTEXT.md`; added pointer in `AGENTS.md`. Full codebase review (dashboard + Android app at `origin/main`). | yes (initial) |
 

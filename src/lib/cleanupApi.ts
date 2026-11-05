@@ -15,34 +15,45 @@ const isFirestoreKind = (kind: CleanupKind): kind is FirestoreKind =>
 /** Photos go 100 per request; this many requests is 6,000 photos, then it stops rather than loop. */
 const MAX_SERVER_ROUNDS = 60;
 
-async function callServer(kind: "photos" | "orphans", mode: "preview" | "run", days: number | null) {
+export type CleanupParam = number | { before: number; after?: number; label?: string } | null;
+
+async function callServer(kind: "photos" | "orphans", mode: "preview" | "run", param: CleanupParam) {
   const user = firebase().auth.currentUser;
   if (!user) throw new Error("Sign in again.");
+  const body: Record<string, unknown> = { kind, mode };
+  if (typeof param === "number") {
+    body.olderThanDays = param;
+  } else if (param != null) {
+    body.beforeMs = param.before;
+    if (param.after != null) body.afterMs = param.after;
+    if (param.label) body.scopeLabel = param.label;
+  }
+
   const response = await fetch("/api/cleanup", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${await user.getIdToken()}` },
-    body: JSON.stringify({ kind, mode, olderThanDays: days }),
+    body: JSON.stringify(body),
   });
   const data = (await response.json().catch(() => ({}))) as { preview?: CleanupPreview; result?: CleanupResult; error?: string };
   if (!response.ok) throw new Error(data.error ?? `Cleanup failed (${response.status}).`);
   return data;
 }
 
-export async function previewCleanup(kind: CleanupKind, days: number | null): Promise<CleanupPreview> {
-  if (isFirestoreKind(kind)) return previewFirestoreCleanup(kind, days ?? 0);
-  const { preview } = await callServer(kind, "preview", days);
+export async function previewCleanup(kind: CleanupKind, param: CleanupParam): Promise<CleanupPreview> {
+  if (isFirestoreKind(kind)) return previewFirestoreCleanup(kind, param ?? 0);
+  const { preview } = await callServer(kind, "preview", param);
   if (!preview) throw new Error("No preview came back.");
   return preview;
 }
 
-export async function runCleanup(kind: CleanupKind, days: number | null, onProgress?: (deletedSoFar: number) => void): Promise<CleanupResult> {
-  if (isFirestoreKind(kind)) return runFirestoreCleanup(kind, days ?? 0, onProgress);
+export async function runCleanup(kind: CleanupKind, param: CleanupParam, onProgress?: (deletedSoFar: number) => void): Promise<CleanupResult> {
+  if (isFirestoreKind(kind)) return runFirestoreCleanup(kind, param ?? 0, onProgress);
 
   let deleted = 0;
   const failed: CleanupResult["failed"] = [];
   let remaining = 0;
   for (let round = 0; round < MAX_SERVER_ROUNDS; round++) {
-    const { result } = await callServer(kind, "run", days);
+    const { result } = await callServer(kind, "run", param);
     if (!result) throw new Error("No result came back.");
     deleted += result.deleted;
     failed.push(...result.failed);

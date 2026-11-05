@@ -13,6 +13,7 @@ import {
   START_CENTER,
   START_ZOOM,
   hasPosition,
+  photoPinElement,
   pinElement,
   popupFor,
   siteNamesFor,
@@ -27,12 +28,13 @@ const PIN_SIZE_PX = 34;
  * Free fallback map (OpenStreetMap tiles, no key), used when there is no
  * Google Maps key or Google rejects it. Pins follow `crew` as it updates.
  */
-export function LeafletCrewMap({ crew, sites, fitKey, focusId, className }: CrewMapProps) {
+export function LeafletCrewMap({ crew, sites, photos, onSelectPhoto, fitKey, focusId, className }: CrewMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<{
     L: typeof import("leaflet");
     map: LeafletMap;
     markers: Map<string, Marker>;
+    photoMarkers: Map<string, Marker>;
     fitted: string | null;
   } | null>(null);
   const [ready, setReady] = useState(false);
@@ -45,7 +47,7 @@ export function LeafletCrewMap({ crew, sites, fitKey, focusId, className }: Crew
       const map = L.map(containerRef.current).setView([START_CENTER.lat, START_CENTER.lng], START_ZOOM);
       L.tileLayer(TILES, { attribution: ATTRIBUTION, maxZoom: 19 }).addTo(map);
       created = map;
-      stateRef.current = { L, map, markers: new Map(), fitted: null };
+      stateRef.current = { L, map, markers: new Map(), photoMarkers: new Map(), fitted: null };
       setReady(true);
     });
     return () => {
@@ -98,6 +100,40 @@ export function LeafletCrewMap({ crew, sites, fitKey, focusId, className }: Crew
     state.map.flyTo(marker.getLatLng(), MAX_FIT_ZOOM);
     marker.openPopup();
   }, [ready, focusId]);
+
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    const { L, map, photoMarkers } = state;
+    const validPhotos = (photos ?? []).filter(p => (p.lat !== 0 || p.lng !== 0) && !isNaN(p.lat) && !isNaN(p.lng));
+
+    for (const [id, marker] of photoMarkers) {
+      if (!validPhotos.some(p => p.id === id)) {
+        marker.remove();
+        photoMarkers.delete(id);
+      }
+    }
+
+    for (const p of validPhotos) {
+      const existing = photoMarkers.get(p.id);
+      if (existing) {
+        existing.setLatLng([p.lat, p.lng]);
+      } else {
+        const icon = L.divIcon({
+          className: "photo-map-marker",
+          iconSize: [36, 44],
+          iconAnchor: [18, 44],
+          html: photoPinElement(p),
+        });
+        const marker = L.marker([p.lat, p.lng], { icon }).addTo(map);
+        if (p.task) {
+          marker.bindTooltip(p.task, { direction: "top", offset: [0, -42] });
+        }
+        marker.on("click", () => onSelectPhoto?.(p));
+        photoMarkers.set(p.id, marker);
+      }
+    }
+  }, [ready, photos, onSelectPhoto]);
 
   // `isolate` keeps Leaflet's high z-indexes from covering the sticky header and dialogs.
   return <div ref={containerRef} className={cn("isolate z-0 overflow-hidden rounded-2xl bg-muted", className)} />;
