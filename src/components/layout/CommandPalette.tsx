@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Moon, Plus, Sun, UserPlus } from "lucide-react";
+import { Building2, FolderKanban, Moon, Plus, Sun, UserPlus } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -26,8 +26,8 @@ import { navItemsFor } from "./nav";
 /** Ctrl/⌘+K: jump to any page, person or site, or start a creation flow. */
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const router = useRouter();
-  const { sites, crew } = useLiveStore();
-  const { openAddCrew, openCreateSite } = useDialogs();
+  const { sites, crew, projects } = useLiveStore();
+  const { openAddCrew, openCreateSite, openCreateProject } = useDialogs();
   const isSuperadmin = useIsSuperadmin();
   const { setTheme, resolvedTheme } = useTheme();
 
@@ -58,8 +58,11 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               <UserPlus /> Add crew member
               <CommandShortcut>Invite</CommandShortcut>
             </CommandItem>
-            <CommandItem onSelect={() => run(openCreateSite)}>
+            <CommandItem onSelect={() => run(() => openCreateSite())}>
               <Plus /> Create site
+            </CommandItem>
+            <CommandItem onSelect={() => run(() => openCreateProject())}>
+              <FolderKanban /> Create project
             </CommandItem>
             <CommandItem onSelect={() => run(() => setTheme(resolvedTheme === "dark" ? "light" : "dark"))}>
               {resolvedTheme === "dark" ? <Sun /> : <Moon />} Toggle theme
@@ -71,6 +74,15 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               <CommandItem key={item.href} value={`page ${item.label}`} onSelect={() => run(() => router.push(item.href))}>
                 <item.icon /> {item.label}
                 <span className="ml-auto text-xs text-muted-foreground">{item.description}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+          <CommandSeparator />
+          <CommandGroup heading="Projects">
+            {projects.map(project => (
+              <CommandItem key={project.id} value={`project ${project.name} ${project.code}`} onSelect={() => run(() => router.push(`/projects/${project.id}`))}>
+                <FolderKanban /> {project.name}
+                <span className="ml-auto text-xs text-muted-foreground">{project.code}</span>
               </CommandItem>
             ))}
           </CommandGroup>

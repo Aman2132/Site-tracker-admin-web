@@ -7,7 +7,10 @@ import {
   Eye,
   LayoutGrid,
   List,
+
   MailPlus,
+  Pencil,
+
   MoreHorizontal,
   Search,
   ShieldCheck,
@@ -24,6 +27,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AssignSitesSheet } from "@/components/domain/AssignSheet";
+import { EditCrewDialog } from "@/components/domain/EditCrewDialog";
 import { BatteryMeter } from "@/components/domain/BatteryMeter";
 import { TextInput } from "@/components/domain/FormBits";
 import { PageHeader } from "@/components/domain/PageHeader";
@@ -58,7 +62,7 @@ import type { CrewMember, PresenceStatus } from "@/types/domain";
 type Filter = "all" | PresenceStatus;
 type SortKey = "name" | "lastSeen" | "hours";
 
-function CrewActions({ person, onAssign }: { person: CrewMember; onAssign: () => void }) {
+function CrewActions({ person, onAssign, onEdit }: { person: CrewMember; onAssign: () => void; onEdit: () => void }) {
   const { setCrewActive, resendInvite } = useLiveStore();
   const router = useRouter();
   const deactivated = person.status === "deactivated";
@@ -80,6 +84,9 @@ function CrewActions({ person, onAssign }: { person: CrewMember; onAssign: () =>
       <DropdownMenuContent align="end" className="w-52" onClick={e => e.stopPropagation()}>
         <DropdownMenuItem onClick={() => router.push(`/crew/${person.id}`)}>
           <Eye /> View profile
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onEdit}>
+          <Pencil /> Edit details
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onAssign}>
           <Building2 /> Assign sites
@@ -118,6 +125,7 @@ export function CrewView() {
   const { siteById } = useLookups();
   const { openAddCrew } = useDialogs();
   const assign = useTarget();
+  const [editingPerson, setEditingPerson] = useState<CrewMember | null>(null);
   const now = useNow();
 
   const [filter, setFilter] = useState<Filter>("all");
@@ -302,6 +310,11 @@ export function CrewView() {
                       <span>·</span>
                       <span className="shrink-0">{p.status === "invited" ? "Not signed in yet" : p.lastSeenAt ? `Seen ${timeAgo(p.lastSeenAt)}` : "Never seen"}</span>
                     </div>
+                    {(p.email || p.phone) && (
+                      <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                        {[p.phone, p.email].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
                   </div>
                 </Link>
               </li>
@@ -341,7 +354,7 @@ export function CrewView() {
                           <div className="min-w-0">
                             <div className="truncate font-bold transition-colors group-hover:text-primary">{p.name}</div>
                             <div className="truncate text-xs text-muted-foreground">
-                              {[p.jobTitle, p.team].filter(Boolean).join(" · ")}
+                              {[p.jobTitle, p.team, p.phone || p.email].filter(Boolean).join(" · ")}
                               {p.appRole !== "worker" && <span className="ml-1.5 rounded bg-accent px-1 text-[10px] font-bold text-primary uppercase">{roleLabel(p.appRole)}</span>}
                             </div>
                           </div>
@@ -374,7 +387,7 @@ export function CrewView() {
                       </td>
                       <td className="px-3 py-3 text-muted-foreground">{p.status === "invited" ? "Not signed in yet" : timeAgo(p.lastSeenAt)}</td>
                       <td className="px-3 py-3 text-right">
-                        <CrewActions person={p} onAssign={() => assign.show(p.id)} />
+                        <CrewActions person={p} onAssign={() => assign.show(p.id)} onEdit={() => setEditingPerson(p)} />
                       </td>
                     </motion.tr>
                   ))}
@@ -406,6 +419,13 @@ export function CrewView() {
                   <div className="text-sm text-muted-foreground">
                     {[p.jobTitle, p.team].filter(Boolean).join(" · ")}
                   </div>
+                  {(p.email || p.phone) && (
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground truncate">
+                      {p.email && <span>{p.email}</span>}
+                      {p.email && p.phone && <span>·</span>}
+                      {p.phone && <span>{p.phone}</span>}
+                    </div>
+                  )}
                   <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-muted/60 p-3 text-center">
                     <div>
                       <div className="text-sm font-semibold">{formatHours(hoursToday.get(p.id) ?? 0)}</div>
@@ -430,6 +450,7 @@ export function CrewView() {
         </motion.div>
       )}
 
+      <EditCrewDialog person={editingPerson} open={editingPerson != null} onOpenChange={open => !open && setEditingPerson(null)} />
       <AssignSitesSheet key={assign.key} personId={assign.id} open={assign.open} onOpenChange={assign.setOpen} />
     </>
   );

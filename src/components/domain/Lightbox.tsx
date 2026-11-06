@@ -5,10 +5,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Compass,
   Crosshair,
   Download,
+  ExternalLink,
   Hash,
   MapPin,
+  Mountain,
   Play,
   Trash2,
   X,
@@ -22,7 +25,10 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { Button, buttonVariants } from "@/components/ui/button";
-import { formatCoord, formatDateTime, formatDuration } from "@/lib/format";
+import { formatAltitude, formatCoord, formatDateTime, formatDuration, headingToCompass } from "@/lib/format";
+import { PhotoLocationMap } from "./PhotoLocationMap";
+import { toast } from "sonner";
+import { downloadPhotoFile } from "@/lib/photoDownload";
 import { useLookups } from "@/lib/store";
 import { useMounted } from "@/lib/useMounted";
 import { cn } from "@/lib/utils";
@@ -249,6 +255,8 @@ function MetaPanel({
             </div>
           )}
 
+          <PhotoLocationMap photo={photo} />
+
           <dl className="space-y-3.5 text-sm">
             <MetaRow icon={Building2} label="Site">
               {site ? (
@@ -279,15 +287,17 @@ function MetaPanel({
               <span className="font-mono text-xs">
                 {formatCoord(photo.lat, photo.lng)}
               </span>
-              <a
-                href={`https://www.openstreetmap.org/?mlat=${photo.lat}&mlon=${photo.lng}#map=18/${photo.lat}/${photo.lng}`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 block text-xs font-semibold text-primary hover:underline"
-              >
-                View on map
-              </a>
             </MetaRow>
+            {photo.altitude != null && (
+              <MetaRow icon={Mountain} label="Altitude">
+                {formatAltitude(photo.altitude)}
+              </MetaRow>
+            )}
+            {photo.heading != null && (
+              <MetaRow icon={Compass} label="Facing">
+                {photo.heading}° {headingToCompass(photo.heading)}
+              </MetaRow>
+            )}
             {photo.mediaType === "video" && (
               <MetaRow icon={Play} label="Length">
                 {formatDuration(photo.durationMs ?? 0)}
@@ -306,8 +316,24 @@ function MetaPanel({
             onClick={() => logAction("Opened original photo", { kind: "export", targetType: "photo", targetId: photo.id, changes: describePhoto(photo) })}
             className={cn(buttonVariants({ size: "lg" }), "w-full rounded-xl")}
           >
-            <Download /> Open original ({photo.width}×{photo.height})
+            <ExternalLink /> Open original ({photo.width}×{photo.height})
           </a>
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full rounded-xl"
+            onClick={async () => {
+              try {
+                toast.loading("Downloading original photo…", { id: "download-original" });
+                await downloadPhotoFile(photo);
+                toast.success("Photo downloaded", { id: "download-original" });
+              } catch {
+                toast.error("Download failed", { id: "download-original" });
+              }
+            }}
+          >
+            <Download /> Download photo
+          </Button>
           {onDelete && (
             <Button variant="outline" size="lg" className="w-full text-danger hover:text-danger" onClick={() => onDelete(photo)}>
               <Trash2 /> Delete photo

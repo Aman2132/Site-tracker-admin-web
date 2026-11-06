@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { attendanceFor, collapseRepeats, hoursOnDay, overlappingSessionIds } from "./insights.ts";
 import { deriveCrew, settleSessions, toEvent, toPhoto } from "./live.ts";
 import { filesOf, storagePathFromUrl } from "./photoFiles.ts";
+import { canAttachSiteToProject, getStockAlert, projectNameProblem, siteNameProblem } from "./projectInventory.ts";
 import { DAY, HOUR, MINUTE, TZ_OFFSET, dayStart, fromLocalInput, sessionTimesProblem, toLocalInput } from "./time.ts";
 
 const NOW = Date.UTC(2026, 9, 5, 10, 0);
@@ -28,6 +29,19 @@ test("the current site only shows while checked in, and the last position is kep
   const out = deriveCrew([person], { p: { lat: 1, lng: 2, siteId: null, lastFixAt: NOW } }, NOW)[0];
   assert.equal(out.currentSiteId, undefined);
   assert.deepEqual([out.lat, out.lng], [1, 2]);
+});
+
+test("crew email and phone are derived with fallbacks", () => {
+  const p1 = deriveCrew([{ ...person, email: "pooja@example.com", phone: "+977 9800000000" }], {}, NOW)[0];
+  assert.equal(p1.email, "pooja@example.com");
+  assert.equal(p1.phone, "+977 9800000000");
+
+  const p2 = deriveCrew([{ ...person, phoneNumber: "+977 9811111111" }], {}, NOW)[0];
+  assert.equal(p2.email, "");
+  assert.equal(p2.phone, "+977 9811111111");
+
+  const p3 = deriveCrew([{ ...person, mobile: "+977 9822222222" }], {}, NOW)[0];
+  assert.equal(p3.phone, "+977 9822222222");
 });
 
 test("an unclosed session ends at the last fix once the signal is lost", () => {
@@ -69,6 +83,16 @@ test("old photos without site, size or preview still map", () => {
 test("photo note is kept when present, dropped when blank", () => {
   assert.equal(toPhoto("x", { note: "  Cracked slab  " }).note, "Cracked slab");
   assert.equal(toPhoto("x", { note: "   " }).note, undefined);
+});
+
+test("photo altitude and heading are mapped and rounded", () => {
+  const photo = toPhoto("x", { altitude: 1350.46, heading: 245.7 });
+  assert.equal(photo.altitude, 1350.5);
+  assert.equal(photo.heading, 246);
+
+  const empty = toPhoto("y", {});
+  assert.equal(empty.altitude, undefined);
+  assert.equal(empty.heading, undefined);
 });
 
 test("events use the recorded type, else guess from legacy text", () => {
@@ -382,4 +406,36 @@ test("the gate's memory survives a reload, so a reload loop cannot dodge the hou
   const second = createViewGate({ dedupeMs: 5 * MINUTE, maxPerHour: 2 }, saved);
   assert.equal(second.allow("view:/a", t0 + 2 * MINUTE), false); // still a repeat
   assert.equal(second.allow("view:/c", t0 + 2 * MINUTE), false); // cap of 2 already used
+});
+
+
+test("project and site names must be unique ignoring case and extra whitespace, and one site cannot belong to two projects", () => {
+  const existingProjects = [{ id: "pr1", name: "Riverside Apartments" }];
+  assert.equal(projectNameProblem("ab", existingProjects), "Give the project a name (at least 3 characters)");
+  assert.equal(projectNameProblem("  riverside   apartments ", existingProjects), "A project with this name already exists");
+  assert.equal(projectNameProblem("Riverside Apartments", existingProjects, "pr1"), null);
+  assert.equal(projectNameProblem("Metro Line 4", existingProjects), null);
+
+  const existingSites = [
+    { id: "s1", name: "Sector 75 · Phase 2", projectId: "pr1" },
+    { id: "s2", name: "North Yard", projectId: undefined },
+  ];
+  assert.equal(siteNameProblem("xy", existingSites), "Give the site a name your crew will recognise");
+  assert.equal(siteNameProblem("  sector 75 ·   phase 2 ", existingSites), "A site with this name already exists");
+  assert.equal(siteNameProblem("East Depot", existingSites, ["  east   depot "]), "You already added a site with this name");
+  assert.equal(siteNameProblem("East Depot", existingSites, ["West Depot"]), null);
+
+  assert.equal(canAttachSiteToProject(existingSites[0]), false);
+  assert.equal(canAttachSiteToProject(existingSites[0], "pr2"), false);
+  assert.equal(canAttachSiteToProject(existingSites[0], "pr1"), true);
+  assert.equal(canAttachSiteToProject(existingSites[1]), true);
+  assert.equal(canAttachSiteToProject(existingSites[1], "pr2"), true);
+});
+
+test("stock alerts distinguish out of stock, critical, low stock and healthy levels", () => {
+  assert.deepEqual(getStockAlert(100, 0), { level: "out", percent: 0, label: "Out of stock" });
+  assert.deepEqual(getStockAlert(100, -5), { level: "out", percent: 0, label: "Out of stock" });
+  assert.deepEqual(getStockAlert(100, 8), { level: "critical", percent: 8, label: "Critical (8% left)" });
+  assert.deepEqual(getStockAlert(100, 20), { level: "low", percent: 20, label: "Low stock (20% left)" });
+  assert.deepEqual(getStockAlert(100, 75), { level: "ok", percent: 75, label: "75% available" });
 });

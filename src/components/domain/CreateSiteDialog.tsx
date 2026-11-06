@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type { NewSiteInput } from "@/lib/admin";
+import { siteNameProblem } from "@/lib/projectInventory";
 import { attempt, useLiveStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -19,11 +20,22 @@ import { PersonAvatar } from "./PersonAvatar";
 const SITE_COLORS = ["#1c4ff0", "#0f9d58", "#a142f4", "#e2670f", "#12b5cb", "#d93025"];
 
 /** A site is a name, a status and its crew — it has no location of its own. */
-export function CreateSiteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function CreateSiteDialog({
+  open,
+  onOpenChange,
+  presetProjectId,
+  onCreateProject,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  presetProjectId?: string;
+  onCreateProject?: () => void;
+}) {
   const router = useRouter();
-  const { crew, sites, createSite } = useLiveStore();
+  const { crew, sites, projects, createSite } = useLiveStore();
   const [form, setForm] = useState<NewSiteInput>({
     name: "",
+    projectId: presetProjectId ?? projects[0]?.id,
     manager: "",
     status: "planning",
     color: SITE_COLORS[sites.length % SITE_COLORS.length],
@@ -33,7 +45,7 @@ export function CreateSiteDialog({ open, onOpenChange }: { open: boolean; onOpen
   const [busy, setBusy] = useState(false);
 
   const set = <K extends keyof NewSiteInput>(key: K, value: NewSiteInput[K]) => setForm(f => ({ ...f, [key]: value }));
-  const nameError = form.name.trim().length < 3 ? "Give the site a name your crew will recognise" : undefined;
+  const nameError = siteNameProblem(form.name, sites) ?? undefined;
   const assignable = crew.filter(c => c.status !== "deactivated");
 
   const submit = async () => {
@@ -84,6 +96,28 @@ export function CreateSiteDialog({ open, onOpenChange }: { open: boolean; onOpen
               invalid={touched && !!nameError}
               onChange={e => set("name", e.target.value)}
             />
+          </Field>
+
+          <Field label="Project" hint="A site belongs to one project at most. Leave unassigned to attach it later.">
+            <div className="flex flex-wrap gap-2">
+              <ChoiceChip selected={!form.projectId} onClick={() => set("projectId", undefined)}>
+                Unassigned
+              </ChoiceChip>
+              {projects.map(project => (
+                <ChoiceChip key={project.id} selected={form.projectId === project.id} onClick={() => set("projectId", project.id)}>
+                  {project.name}
+                </ChoiceChip>
+              ))}
+              {onCreateProject && (
+                <button
+                  type="button"
+                  onClick={onCreateProject}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-dashed border-border px-3.5 text-sm font-semibold text-primary hover:border-primary/40"
+                >
+                  + New project
+                </button>
+              )}
+            </div>
           </Field>
 
           <div className="grid gap-5 sm:grid-cols-2">

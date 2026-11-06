@@ -7,6 +7,7 @@ import type {
   PersonDoc,
   PositionDoc,
   PresenceSession,
+  Project,
   Site,
   SitePhoto,
   SiteStatus,
@@ -49,7 +50,7 @@ export function deriveCrew(people: PersonDoc[], positions: Record<string, Positi
       id: person.id,
       name: person.name,
       email: person.email ?? "",
-      phone: person.phone ?? "",
+      phone: person.phone ?? person.phoneNumber ?? person.mobile ?? "",
       jobTitle: person.role,
       team: person.team ?? "",
       appRole: person.appRole,
@@ -129,6 +130,20 @@ export function toSite(id: string, data: Record<string, unknown>, now: number): 
     startedAt: toMillis(data.startedAt ?? data.createdAt, now),
     manager: typeof data.manager === "string" ? data.manager : "",
     color: typeof data.color === "string" ? data.color : "#1c4ff0",
+    projectId: typeof data.projectId === "string" && data.projectId ? data.projectId : undefined,
+  };
+}
+
+export function toProject(id: string, data: Record<string, unknown>, now: number): Project {
+  const name = typeof data.name === "string" ? data.name : "Unnamed project";
+  return {
+    id,
+    name,
+    code: typeof data.code === "string" && data.code ? data.code : initials(name),
+    status: (typeof data.status === "string" ? data.status : "active") as SiteStatus,
+    startedAt: toMillis(data.startedAt ?? data.createdAt, now),
+    manager: typeof data.manager === "string" ? data.manager : "",
+    color: typeof data.color === "string" ? data.color : "#1c4ff0",
   };
 }
 
@@ -154,6 +169,8 @@ export function toPhoto(id: string, data: Record<string, unknown>): SitePhoto {
     lng: Number(data.lng ?? 0),
     accuracy: Math.round(Number(data.accuracy ?? 0)),
     plusCode: String(data.plusCode ?? ""),
+    altitude: typeof data.altitude === "number" ? Math.round(data.altitude * 10) / 10 : undefined,
+    heading: typeof data.heading === "number" ? Math.round(data.heading) : undefined,
   };
 }
 

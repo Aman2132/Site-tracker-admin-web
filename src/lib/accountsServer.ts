@@ -90,6 +90,8 @@ export interface SiteDeletion {
   inventory: number;
   sessions: number;
   events: number;
+  siteInventory?: number;
+  inventoryUsage?: number;
 }
 
 /**
@@ -104,6 +106,22 @@ export async function deleteSiteCompletely(id: string, ctx: DeleteContext): Prom
   const sessions = await deleteMatching(db.collection("sessions").where("siteId", "==", id));
   const events = await deleteMatching(db.collection("events").where("siteId", "==", id));
 
+  // Release any unconsumed project inventory allocations so parent project totals stay consistent
+  const siteInventorySnap = await db.collection("siteInventory").where("siteId", "==", id).get();
+  for (const allocDoc of siteInventorySnap.docs) {
+    const alloc = allocDoc.data();
+    if (alloc.projectItemId && alloc.quantity) {
+      const remainingAlloc = Math.max(0, Number(alloc.quantity ?? 0) - Number(alloc.usedQuantity ?? 0));
+      if (remainingAlloc > 0) {
+        await db.collection("projectInventory").doc(alloc.projectItemId).update({
+          allocatedQuantity: FieldValue.increment(-remainingAlloc),
+        }).catch(() => {});
+      }
+    }
+  }
+  const siteInventory = await deleteMatching(db.collection("siteInventory").where("siteId", "==", id));
+  const inventoryUsage = await deleteMatching(db.collection("inventoryUsage").where("siteId", "==", id));
+
   const assigned = await db.collection("people").where("siteIds", "array-contains", id).get();
   const batch = db.batch();
   assigned.docs.forEach(doc => batch.update(doc.ref, { siteIds: FieldValue.arrayRemove(id) }));
@@ -117,5 +135,59 @@ export async function deleteSiteCompletely(id: string, ctx: DeleteContext): Prom
   if (Object.keys(cleared).length > 0) await adminRtdb().ref("positions").update(cleared);
 
   await db.collection("sites").doc(id).delete();
-  return { photos, inventory, sessions, events };
+  return { photos, inventory, sessions, events, siteInventory, inventoryUsage };
+}
+
+export interface ProjectDeletion {
+  sitesDeleted: number;
+  sitesDetached: number;
+  stockItems: number;
+  allocations: number;
+  usage: number;
+}
+
+/**
+ * 🚨 Superadmin only. Deletes a project. If deleteSites is true, all attached sites
+ * are completely deleted with their photos, check-ins, sessions and records.
+ * If deleteSites is false, attached sites have their projectId cleared (become independent unassigned sites).
+ * In both cases, project stock, site allocations under this project, and inventory usage are cleaned up.
+ */
+export async function deleteProjectCompletely(
+  id: string,
+  deleteSites: boolean,
+  ctx: DeleteContext
+): Promise<ProjectDeletion> {
+  const db = adminDb();
+  let sitesDeleted = 0;
+  let sitesDetached = 0;
+
+  const sitesSnap = await db.collection("sites").where("projectId", "==", id).get();
+
+  if (deleteSites) {
+    for (const siteDoc of sitesSnap.docs) {
+      await deleteSiteCompletely(siteDoc.id, ctx);
+      sitesDeleted++;
+    }
+  } else {
+    const batch = db.batch();
+    sitesSnap.docs.forEach(doc => {
+      batch.update(doc.ref, { projectId: FieldValue.delete() });
+    });
+    await batch.commit();
+    sitesDetached = sitesSnap.size;
+  }
+
+  const stockItems = await deleteMatching(db.collection("projectInventory").where("projectId", "==", id));
+  const allocations = await deleteMatching(db.collection("siteInventory").where("projectId", "==", id));
+  const usage = await deleteMatching(db.collection("inventoryUsage").where("projectId", "==", id));
+
+  await db.collection("projects").doc(id).delete();
+
+  return {
+    sitesDeleted,
+    sitesDetached,
+    stockItems,
+    allocations,
+    usage,
+  };
 }

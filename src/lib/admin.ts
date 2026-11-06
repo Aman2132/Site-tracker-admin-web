@@ -8,7 +8,10 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  getDocs,
   getFirestore,
+  increment,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -19,6 +22,15 @@ import { CHANGES_MAX, REASON_MAX, type AuditKind } from "./auditLog";
 import { FIREBASE_CONFIG, firebase } from "./firebase";
 
 import type { AppRole, EventKind, InventoryChanges, SessionEndReason, SitePhoto, SiteStatus } from "../types/domain";
+import {
+  allocationProblem,
+  availableAtSite,
+  availableToAllocate,
+  canAttachSiteToProject,
+  projectNameProblem,
+  siteNameProblem,
+  usageProblem,
+} from "./projectInventory";
 
 /**
  * Everything the dashboard writes. Each function is one admin action; the
@@ -28,10 +40,50 @@ import type { AppRole, EventKind, InventoryChanges, SessionEndReason, SitePhoto,
 
 export interface NewSiteInput {
   name: string;
+  projectId?: string;
   manager: string;
   status: SiteStatus;
   color: string;
   crewIds: string[];
+}
+
+export interface NewProjectSiteInput {
+  name: string;
+  manager?: string;
+  status?: SiteStatus;
+  color?: string;
+}
+
+export interface NewProjectInput {
+  /** Existing unassigned site ids to attach to this project. */
+  existingSiteIds?: string[];
+  /** Brand-new sites to create directly under this project. */
+  newSites?: NewProjectSiteInput[];
+  name: string;
+  manager: string;
+  status: SiteStatus;
+  color: string;
+}
+
+export interface ProjectStockInput {
+  projectId: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  note?: string;
+}
+
+export interface SiteAllocationInput {
+  projectItemId: string;
+  siteId: string;
+  quantity: number;
+}
+
+export interface InventoryUsageInput {
+  allocationId: string;
+  quantity: number;
+  note?: string;
+  proofPhotoIds?: string[];
 }
 
 export interface NewCrewInput {
@@ -65,7 +117,16 @@ function siteCode(name: string): string {
   );
 }
 
+const SITE_PALETTE = ["#1c4ff0", "#0f9d58", "#a142f4", "#e2670f", "#12b5cb", "#d93025"];
+
 export async function createSite(input: NewSiteInput): Promise<string> {
+  const existingSnap = await getDocs(collection(firebase().db, "sites"));
+  const existingSites = existingSnap.docs
+    .filter(d => d.id !== "default")
+    .map(d => ({ id: d.id, name: String(d.data().name ?? "") }));
+  const nameErr = siteNameProblem(input.name, existingSites);
+  if (nameErr) throw new Error(nameErr);
+  input = { ...input, name: input.name.trim(), manager: input.manager.trim() };
   const { db } = firebase();
   const ref = await addDoc(collection(db, "sites"), {
     name: input.name,
@@ -73,6 +134,7 @@ export async function createSite(input: NewSiteInput): Promise<string> {
     status: input.status,
     manager: input.manager,
     color: input.color,
+    ...(input.projectId ? { projectId: input.projectId } : {}),
     startedAt: Date.now(),
     createdAt: serverTimestamp(),
   });
@@ -81,8 +143,181 @@ export async function createSite(input: NewSiteInput): Promise<string> {
   return ref.id;
 }
 
+/** Creates the parent record that groups several working sites. */
+export async function createProject(input: NewProjectInput): Promise<string> {
+  const { db } = firebase();
+  const [projectSnap, siteSnap] = await Promise.all([
+    getDocs(collection(db, "projects")),
+    getDocs(collection(db, "sites")),
+  ]);
+
+  const existingProjects = projectSnap.docs.map(d => ({ id: d.id, name: String(d.data().name ?? "") }));
+  const nameErr = projectNameProblem(input.name, existingProjects);
+  if (nameErr) throw new Error(nameErr);
+
+  const existingSites = siteSnap.docs
+    .filter(d => d.id !== "default")
+    .map(d => ({ id: d.id, name: String(d.data().name ?? ""), projectId: d.data().projectId ? String(d.data().projectId) : undefined }));
+
+  const existingSiteMap = new Map(existingSites.map(s => [s.id, s]));
+  const existingSiteIds = input.existingSiteIds ?? [];
+  for (const sId of existingSiteIds) {
+    const found = existingSiteMap.get(sId);
+    if (!found) throw new Error(`Site with id "${sId}" does not exist.`);
+    if (!canAttachSiteToProject(found)) {
+      throw new Error(`Site "${found.name}" is already assigned to another project.`);
+    }
+  }
+
+  const newSites = input.newSites ?? [];
+  const pendingNames: string[] = [];
+  for (const ns of newSites) {
+    const sErr = siteNameProblem(ns.name, existingSites, pendingNames);
+    if (sErr) throw new Error(sErr);
+    pendingNames.push(ns.name.trim());
+  }
+
+  const batch = writeBatch(db);
+  const projectRef = doc(collection(db, "projects"));
+  const cleanName = input.name.trim();
+
+  batch.set(projectRef, {
+    name: cleanName,
+    code: siteCode(cleanName),
+    status: input.status,
+    manager: input.manager.trim(),
+    color: input.color,
+    startedAt: Date.now(),
+    createdAt: serverTimestamp(),
+  });
+
+  for (const sId of existingSiteIds) {
+    batch.update(doc(db, "sites", sId), { projectId: projectRef.id });
+  }
+
+  const createdSiteRefs: { ref: ReturnType<typeof doc>; name: string }[] = [];
+  newSites.forEach((ns, idx) => {
+    const siteRef = doc(collection(db, "sites"));
+    const trimmedSiteName = ns.name.trim();
+    batch.set(siteRef, {
+      name: trimmedSiteName,
+      code: siteCode(trimmedSiteName),
+      status: ns.status ?? "planning",
+      manager: ns.manager?.trim() ?? "",
+      color: ns.color ?? SITE_PALETTE[(existingSites.length + idx) % SITE_PALETTE.length],
+      projectId: projectRef.id,
+      startedAt: Date.now(),
+      createdAt: serverTimestamp(),
+    });
+    createdSiteRefs.push({ ref: siteRef, name: trimmedSiteName });
+  });
+
+  await batch.commit();
+
+  await logEvent(`Project created — ${cleanName}`, "site");
+  for (const s of createdSiteRefs) {
+    await logEvent(`Site created — ${s.name}`, "site", { siteId: s.ref.id });
+  }
+
+  return projectRef.id;
+}
+
+export async function addProjectStock(input: ProjectStockInput): Promise<string> {
+  const ref = await addDoc(collection(firebase().db, "projectInventory"), {
+    projectId: input.projectId,
+    name: input.name.trim().replace(/\s+/g, " "),
+    unit: input.unit.trim(),
+    quantity: input.quantity,
+    allocatedQuantity: 0,
+    usedQuantity: 0,
+    ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+    receivedAt: Date.now(),
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+/**
+ * Reserves project stock at a site. The transaction prevents an owner from
+ * allocating more than the project has remaining when two edits overlap.
+ */
+export async function allocateProjectStock(input: SiteAllocationInput): Promise<string> {
+  const { db } = firebase();
+  const allocationRef = doc(collection(db, "siteInventory"));
+  await runTransaction(db, async transaction => {
+    const itemRef = doc(db, "projectInventory", input.projectItemId);
+    const itemSnap = await transaction.get(itemRef);
+    if (!itemSnap.exists()) throw new Error("That project item no longer exists.");
+    const item = itemSnap.data();
+    const available = availableToAllocate({ quantity: Number(item.quantity ?? 0), allocatedQuantity: Number(item.allocatedQuantity ?? 0) });
+    const problem = allocationProblem(available, input.quantity);
+    if (problem) throw new Error(problem);
+    transaction.update(itemRef, { allocatedQuantity: increment(input.quantity) });
+    transaction.set(allocationRef, {
+      projectId: String(item.projectId ?? ""),
+      projectItemId: input.projectItemId,
+      siteId: input.siteId,
+      name: String(item.name ?? ""),
+      unit: String(item.unit ?? ""),
+      quantity: input.quantity,
+      usedQuantity: 0,
+      allocatedAt: Date.now(),
+      createdAt: serverTimestamp(),
+    });
+  });
+  return allocationRef.id;
+}
+
+/**
+ * Records consumption at a site. This is the authoritative no-overdraw gate:
+ * it increments both the site allocation and project roll-up in one atomic
+ * transaction, and writes an append-only record with any proof photo ids.
+ */
+export async function recordInventoryUsage(input: InventoryUsageInput, actor: { id: string; name: string; role: "crew" | "admin" }): Promise<string> {
+  const { db } = firebase();
+  const usageRef = doc(collection(db, "inventoryUsage"));
+  await runTransaction(db, async transaction => {
+    const allocationRef = doc(db, "siteInventory", input.allocationId);
+    const allocationSnap = await transaction.get(allocationRef);
+    if (!allocationSnap.exists()) throw new Error("That site allocation no longer exists.");
+    const allocation = allocationSnap.data();
+    const available = availableAtSite({ quantity: Number(allocation.quantity ?? 0), usedQuantity: Number(allocation.usedQuantity ?? 0) });
+    const problem = usageProblem(available, input.quantity);
+    if (problem) throw new Error(problem);
+    const projectItemRef = doc(db, "projectInventory", String(allocation.projectItemId ?? ""));
+    transaction.update(allocationRef, { usedQuantity: increment(input.quantity) });
+    transaction.update(projectItemRef, { usedQuantity: increment(input.quantity) });
+    transaction.set(usageRef, {
+      projectId: String(allocation.projectId ?? ""),
+      projectItemId: String(allocation.projectItemId ?? ""),
+      allocationId: input.allocationId,
+      siteId: String(allocation.siteId ?? ""),
+      name: String(allocation.name ?? ""),
+      unit: String(allocation.unit ?? ""),
+      quantity: input.quantity,
+      ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+      proofPhotoIds: input.proofPhotoIds ?? [],
+      actorId: actor.id,
+      actorName: actor.name,
+      actorRole: actor.role,
+      at: Date.now(),
+      createdAt: serverTimestamp(),
+    });
+  });
+  return usageRef.id;
+}
+
 export async function setSiteStatus(siteId: string, status: SiteStatus): Promise<void> {
   await updateDoc(doc(firebase().db, "sites", siteId), { status });
+}
+
+export async function setProjectStatus(projectId: string, status: SiteStatus): Promise<void> {
+  await updateDoc(doc(firebase().db, "projects", projectId), { status });
+}
+
+/** Moves an unallocated site to a project, or clears its project for legacy sites. */
+export async function setSiteProject(siteId: string, projectId?: string): Promise<void> {
+  await updateDoc(doc(firebase().db, "sites", siteId), { projectId: projectId || deleteField() });
 }
 
 /** Adds and removes a site on several people at once. */
@@ -101,6 +336,22 @@ export async function setPersonSites(personId: string, siteIds: string[]): Promi
 export async function setCrewActive(personId: string, name: string, active: boolean): Promise<void> {
   await updateDoc(doc(firebase().db, "people", personId), { active });
   await logEvent(`${name} ${active ? "reactivated" : "deactivated"}`, "crew", { personId });
+}
+
+export interface PersonDetailsInput {
+  role?: string;
+  team?: string;
+  email?: string;
+  phone?: string;
+}
+
+export async function updatePersonDetails(personId: string, changes: PersonDetailsInput): Promise<void> {
+  const updates: Record<string, string> = {};
+  if (changes.role !== undefined) updates.role = changes.role.trim();
+  if (changes.team !== undefined) updates.team = changes.team.trim();
+  if (changes.email !== undefined) updates.email = changes.email.trim();
+  if (changes.phone !== undefined) updates.phone = changes.phone.trim();
+  await updateDoc(doc(firebase().db, "people", personId), updates);
 }
 
 /** 20 random characters. The person never sees it — they set their own through the reset email. */
@@ -245,6 +496,24 @@ export const deletePerson = (id: string): Promise<void> => postDelete("/api/peop
  * Done on the server (/api/sites/delete).
  */
 export const deleteSite = (id: string): Promise<void> => postDelete("/api/sites/delete", id);
+
+/**
+ * 🚨 Superadmin only. Deletes a project. If deleteSites is true, all attached sites
+ * and their contents are deleted. If false, sites are detached and kept independent.
+ */
+export async function deleteProject(id: string, deleteSites: boolean): Promise<void> {
+  const user = firebase().auth.currentUser;
+  if (!user) throw new Error("Sign in again.");
+  const response = await fetch("/api/projects/delete", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${await user.getIdToken()}` },
+    body: JSON.stringify({ id, deleteSites }),
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `Deleting failed (${response.status}).`);
+  }
+}
 
 /**
  * Corrects an entry the crew logged. Stamps who changed it and when, which the

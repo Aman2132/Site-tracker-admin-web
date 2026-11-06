@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, BatteryLow, CalendarCheck2, Clock3, ImageIcon, MailQuestion, Plus, Timer, UserPlus, Users } from "lucide-react";
+import { ArrowRight, BatteryLow, CalendarCheck2, Clock3, FolderKanban, ImageIcon, MailQuestion, Plus, Timer, UserPlus, Users } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -42,7 +42,7 @@ function greeting(now: number) {
 export function OverviewView() {
   // Admin accounts aren't crew: every headcount on this page is the working roster.
   const { roster: crew, sites, sessions, photos, events } = useLiveStore();
-  const { openAddCrew, openCreateSite } = useDialogs();
+  const { openAddCrew, openCreateSite, openCreateProject } = useDialogs();
   const now = useNow();
   const admin = useAdmin();
   const [range, setRange] = useState<"7" | "14">("7");
@@ -104,7 +104,10 @@ export function OverviewView() {
             <Button variant="outline" size="lg" className="rounded-xl bg-card" onClick={() => openAddCrew()}>
               <UserPlus /> Add crew
             </Button>
-            <Button size="lg" className="rounded-xl px-4 shadow-glow" onClick={openCreateSite}>
+            <Button variant="outline" size="lg" className="rounded-xl bg-card" onClick={() => openCreateProject()}>
+              <FolderKanban /> Create project
+            </Button>
+            <Button size="lg" className="rounded-xl px-4 shadow-glow" onClick={() => openCreateSite()}>
               <Plus /> Create site
             </Button>
           </>

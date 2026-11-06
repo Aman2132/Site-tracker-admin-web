@@ -34,18 +34,45 @@ const BATCH = 500;
 const MAX_BATCHES = 40;
 const SAMPLE = 10;
 
-/** The queries that find records older than the cutoff. Events from before the feed used server timestamps hold a plain number, which is a different type to Firestore, so both are asked. */
-function queriesFor(kind: FirestoreKind, cutoff: number): Query<DocumentData>[] {
+export type ScopeArg = number | { before: number; after?: number; label?: string };
+
+export function parseScope(scopeOrDays: ScopeArg, now: number) {
+  if (typeof scopeOrDays === "number") {
+    return { before: cutoffFor(scopeOrDays, now), after: undefined, days: scopeOrDays, label: `older than ${scopeOrDays} days` };
+  }
+  return {
+    before: scopeOrDays.before,
+    after: scopeOrDays.after,
+    days: null,
+    label: scopeOrDays.label ?? (scopeOrDays.after ? `between ${new Date(scopeOrDays.after).toLocaleDateString()} and ${new Date(scopeOrDays.before).toLocaleDateString()}` : `before ${new Date(scopeOrDays.before).toLocaleDateString()}`),
+  };
+}
+
+/** The queries that find records within the cutoff. */
+function queriesFor(kind: FirestoreKind, before: number, after?: number): Query<DocumentData>[] {
   const { db } = firebase();
   if (kind === "events") {
+    if (after != null) {
+      return [
+        query(collection(db, "events"), where("at", "<=", Timestamp.fromMillis(before)), where("at", ">=", Timestamp.fromMillis(after))),
+        query(collection(db, "events"), where("at", "<=", before), where("at", ">=", after)),
+      ];
+    }
     return [
-      query(collection(db, "events"), where("at", "<", Timestamp.fromMillis(cutoff))),
-      query(collection(db, "events"), where("at", "<", cutoff)),
+      query(collection(db, "events"), where("at", "<=", Timestamp.fromMillis(before))),
+      query(collection(db, "events"), where("at", "<=", before)),
     ];
   }
-  if (kind === "views") return [query(collection(db, "adminViews"), where("at", "<", cutoff))];
-  if (kind === "sessions") return [query(collection(db, "sessions"), where("start", "<", cutoff))];
-  return [query(collection(db, "inventory"), where("receivedAt", "<", cutoff))];
+  if (kind === "views") {
+    if (after != null) return [query(collection(db, "adminViews"), where("at", "<=", before), where("at", ">=", after))];
+    return [query(collection(db, "adminViews"), where("at", "<=", before))];
+  }
+  if (kind === "sessions") {
+    if (after != null) return [query(collection(db, "sessions"), where("start", "<=", before), where("start", ">=", after))];
+    return [query(collection(db, "sessions"), where("start", "<=", before))];
+  }
+  if (after != null) return [query(collection(db, "inventory"), where("receivedAt", "<=", before), where("receivedAt", ">=", after))];
+  return [query(collection(db, "inventory"), where("receivedAt", "<=", before))];
 }
 
 /** An inventory entry is only removed once everything received has been used. */
@@ -54,9 +81,9 @@ const eligible = (kind: FirestoreKind, doc: QueryDocumentSnapshot<DocumentData>)
   isUsedUp({ quantity: Number(doc.data().quantity ?? 0), usedQuantity: Number(doc.data().usedQuantity ?? 0) });
 
 /** Up to `max` eligible records, found by asking the server. */
-async function findEligible(kind: FirestoreKind, cutoff: number, max: number) {
+async function findEligible(kind: FirestoreKind, before: number, after: number | undefined, max: number) {
   const found: QueryDocumentSnapshot<DocumentData>[] = [];
-  for (const q of queriesFor(kind, cutoff)) {
+  for (const q of queriesFor(kind, before, after)) {
     const snapshot = await getDocs(query(q, limit(kind === "inventory" ? 2000 : max)));
     for (const doc of snapshot.docs) if (eligible(kind, doc) && found.length < max) found.push(doc);
     if (found.length >= max) break;
@@ -65,23 +92,23 @@ async function findEligible(kind: FirestoreKind, cutoff: number, max: number) {
 }
 
 /** What a cleanup would delete, asked of the server (counts are exact; sizes are estimated). */
-export async function previewFirestoreCleanup(kind: FirestoreKind, days: number, now = Date.now()): Promise<CleanupPreview> {
-  const cutoff = cutoffFor(days, now);
+export async function previewFirestoreCleanup(kind: FirestoreKind, scopeOrDays: ScopeArg, now = Date.now()): Promise<CleanupPreview> {
+  const { before, after, days, label } = parseScope(scopeOrDays, now);
   if (kind === "inventory") {
-    const docs = await findEligible(kind, cutoff, 2000);
+    const docs = await findEligible(kind, before, after, 2000);
     const bytes = docs.reduce((sum, d) => sum + estimateDocBytes(`inventory/${d.id}`, d.data()), 0);
-    return { kind, olderThanDays: days, count: docs.length, bytes: Math.round(bytes), bytesExact: false };
+    return { kind, olderThanDays: days, beforeMs: before, afterMs: after ?? null, scopeLabel: label, count: docs.length, bytes: Math.round(bytes), bytesExact: false };
   }
   let count = 0;
   const sample: { path: string; data: Record<string, unknown> }[] = [];
-  for (const q of queriesFor(kind, cutoff)) {
+  for (const q of queriesFor(kind, before, after)) {
     count += (await getCountFromServer(q)).data().count;
     if (sample.length < SAMPLE) {
       const docs = await getDocs(query(q, limit(SAMPLE - sample.length)));
       docs.forEach(d => sample.push({ path: `${kind}/${d.id}`, data: d.data() }));
     }
   }
-  return { kind, olderThanDays: days, count, bytes: collectionUsage(kind, count, sample).bytes, bytesExact: false };
+  return { kind, olderThanDays: days, beforeMs: before, afterMs: after ?? null, scopeLabel: label, count, bytes: collectionUsage(kind, count, sample).bytes, bytesExact: false };
 }
 
 /**
@@ -90,16 +117,16 @@ export async function previewFirestoreCleanup(kind: FirestoreKind, days: number,
  */
 export async function runFirestoreCleanup(
   kind: FirestoreKind,
-  days: number,
+  scopeOrDays: ScopeArg,
   onProgress?: (deletedSoFar: number) => void,
   now = Date.now()
 ): Promise<CleanupResult> {
   const { db } = firebase();
-  const cutoff = cutoffFor(days, now);
+  const { before, after } = parseScope(scopeOrDays, now);
   let deleted = 0;
   const failed: CleanupResult["failed"] = [];
   for (let i = 0; i < MAX_BATCHES; i++) {
-    const docs = await findEligible(kind, cutoff, BATCH);
+    const docs = await findEligible(kind, before, after, BATCH);
     if (docs.length === 0) break;
     const batch = writeBatch(db);
     docs.forEach(d => batch.delete(d.ref));
@@ -112,6 +139,6 @@ export async function runFirestoreCleanup(
       break;
     }
   }
-  const after = await previewFirestoreCleanup(kind, days, now);
-  return { kind, deleted, failed, remaining: after.count };
+  const afterPreview = await previewFirestoreCleanup(kind, scopeOrDays, now);
+  return { kind, deleted, failed, remaining: afterPreview.count };
 }

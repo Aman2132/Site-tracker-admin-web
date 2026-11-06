@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarDays,
   Clock,
+  Download,
   CopyX,
   Crosshair,
   ImageIcon,
@@ -28,6 +29,7 @@ import { useAdmin, useIsSuperadmin } from "@/components/auth/AuthProvider";
 import { BarCompare } from "@/components/charts/BarCompare";
 import { ActivityFeed } from "@/components/domain/ActivityFeed";
 import { AssignSitesSheet } from "@/components/domain/AssignSheet";
+import { EditCrewDialog } from "@/components/domain/EditCrewDialog";
 import { BatteryMeter } from "@/components/domain/BatteryMeter";
 import { CrewMap } from "@/components/domain/CrewMap";
 import { DeleteRecordDialog } from "@/components/domain/DeleteRecordDialog";
@@ -42,6 +44,7 @@ import { CountUp, Stagger, StaggerItem } from "@/components/motion";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { formatClock, formatDate, formatDateTime, formatDay, formatHours, formatTime, formatWeekday, hourOfDay, roleLabel, timeAgo } from "@/lib/format";
 import { attendanceFor, isOnShift, lastNDays, overlappingSessionIds } from "@/lib/insights";
+import { downloadCrewTimesheetCsv } from "@/lib/timesheetExport";
 import { HOUR } from "@/lib/time";
 import { attempt, useLiveStore, useNow } from "@/lib/store";
 import { useTarget } from "@/lib/useTarget";
@@ -59,6 +62,7 @@ export function CrewProfileView({ id }: { id: string }) {
   const assign = useTarget();
   const [openPhoto, setOpenPhoto] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingProfile, setEditingProfile] = useState(false);
 
   const data = useMemo(() => {
     if (!person) return null;
@@ -133,12 +137,40 @@ export function CrewProfileView({ id }: { id: string }) {
                   )}
                 </div>
                 <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
-                  {person.email && <span className="inline-flex items-center gap-1.5"><Mail className="size-4" /> {person.email}</span>}
-                  {person.phone && <span className="inline-flex items-center gap-1.5"><Phone className="size-4" /> {person.phone}</span>}
+                  {person.email ? (
+                    <a
+                      href={`mailto:${person.email}`}
+                      className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground hover:underline"
+                      title="Send email"
+                    >
+                      <Mail className="size-4 text-primary" /> {person.email}
+                    </a>
+                  ) : null}
+                  {person.phone ? (
+                    <a
+                      href={`tel:${person.phone}`}
+                      className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground hover:underline"
+                      title="Call phone"
+                    >
+                      <Phone className="size-4 text-primary" /> {person.phone}
+                    </a>
+                  ) : null}
                   {person.joinedAt != null && <span className="inline-flex items-center gap-1.5"><CalendarDays className="size-4" /> Invited {formatDate(person.joinedAt)}</span>}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="lg" className="rounded-xl bg-card" onClick={() => {
+                  const days30 = lastNDays(30);
+                  const res = downloadCrewTimesheetCsv({ person, sessions, sites, days: days30 });
+                  toast.success(`Timesheet exported for ${person.name}`, {
+                    description: `Last 30 days (${res.totalHours} total hours logged).`,
+                  });
+                }}>
+                  <Download className="size-4" /> Export timesheet
+                </Button>
+                <Button variant="outline" size="lg" className="rounded-xl" onClick={() => setEditingProfile(true)}>
+                  <Pencil /> Edit details
+                </Button>
                 {person.status === "invited" && (
                   <Button
                     variant="outline"
@@ -233,6 +265,22 @@ export function CrewProfileView({ id }: { id: string }) {
                     {person.kind === "stale" ? "—" : person.kind === "vehicle" ? "Driving" : person.kind === "walk" ? "Walking" : "Still"}
                   </dd>
                 </div>
+                {person.email ? (
+                  <div className="col-span-2">
+                    <dt className="text-xs text-muted-foreground">Email address</dt>
+                    <dd className="mt-0.5 truncate font-bold">
+                      <a href={`mailto:${person.email}`} className="text-primary hover:underline">{person.email}</a>
+                    </dd>
+                  </div>
+                ) : null}
+                {person.phone ? (
+                  <div className="col-span-2">
+                    <dt className="text-xs text-muted-foreground">Phone number</dt>
+                    <dd className="mt-0.5 truncate font-bold">
+                      <a href={`tel:${person.phone}`} className="text-primary hover:underline">{person.phone}</a>
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
             </Panel>
             <Panel title="Last known location" description={person.lat != null ? `Updated ${timeAgo(person.lastSeenAt)}` : undefined}>
@@ -415,6 +463,7 @@ export function CrewProfileView({ id }: { id: string }) {
         </p>
         <p>Their check-in history, inventory entries and activity events stay for the records.</p>
       </DeleteRecordDialog>
+      <EditCrewDialog person={person} open={editingProfile} onOpenChange={setEditingProfile} />
       <AssignSitesSheet key={assign.key} personId={assign.id} open={assign.open} onOpenChange={assign.setOpen} />
       <DeletableLightbox photos={data.photos.slice(0, 12)} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />
     </>

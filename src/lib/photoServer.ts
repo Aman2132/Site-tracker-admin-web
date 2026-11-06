@@ -42,15 +42,42 @@ const toRef = (id: string, fields: PhotoFields): PhotoRef => {
  * Photo records (just the fields needed to find their files), optionally only
  * those taken before `before`. Oldest first.
  */
-export async function queryPhotoRecords(idToken: string, opts: { before?: number; limit: number }): Promise<PhotoRef[]> {
+export async function queryPhotoRecords(idToken: string, opts: { before?: number; after?: number; limit: number }): Promise<PhotoRef[]> {
+  const hasBefore = opts.before != null;
+  const hasAfter = opts.after != null;
+
+  let whereClause = {};
+  if (hasBefore && hasAfter) {
+    whereClause = {
+      where: {
+        compositeFilter: {
+          op: "AND",
+          filters: [
+            { fieldFilter: { field: { fieldPath: "takenAt" }, op: "GREATER_THAN_OR_EQUAL", value: { integerValue: String(Math.floor(opts.after!)) } } },
+            { fieldFilter: { field: { fieldPath: "takenAt" }, op: "LESS_THAN_OR_EQUAL", value: { integerValue: String(Math.floor(opts.before!)) } } },
+          ],
+        },
+      },
+    };
+  } else if (hasBefore) {
+    whereClause = {
+      where: {
+        fieldFilter: { field: { fieldPath: "takenAt" }, op: "LESS_THAN_OR_EQUAL", value: { integerValue: String(Math.floor(opts.before!)) } },
+      },
+    };
+  } else if (hasAfter) {
+    whereClause = {
+      where: {
+        fieldFilter: { field: { fieldPath: "takenAt" }, op: "GREATER_THAN_OR_EQUAL", value: { integerValue: String(Math.floor(opts.after!)) } },
+      },
+    };
+  }
+
   const structuredQuery = {
     from: [{ collectionId: "photos" }],
     select: { fields: [{ fieldPath: "personId" }, { fieldPath: "uri" }, { fieldPath: "thumbUrl" }, { fieldPath: "takenAt" }] },
-    ...(opts.before != null
-      ? { where: { fieldFilter: { field: { fieldPath: "takenAt" }, op: "LESS_THAN", value: { integerValue: String(Math.floor(opts.before)) } } } }
-      : {}),
-    // Ordering would silently skip records without a takenAt, so only an age filter (which already needs it) orders.
-    ...(opts.before != null ? { orderBy: [{ field: { fieldPath: "takenAt" }, direction: "ASCENDING" }] } : {}),
+    ...whereClause,
+    ...(hasBefore || hasAfter ? { orderBy: [{ field: { fieldPath: "takenAt" }, direction: "ASCENDING" }] } : {}),
     limit: opts.limit,
   };
   const response = await fetch(`${FIRESTORE_DOCUMENTS}:runQuery`, {

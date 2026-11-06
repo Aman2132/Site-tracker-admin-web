@@ -1,7 +1,7 @@
 "use client";
 
 import { describeChanges } from "@/lib/auditLog";
-import { ArrowLeft, Building2, CalendarDays, ChevronDown, Clock, Crosshair, ImageIcon, Trash2, UserPlus, UserRound, Users } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Boxes, Building2, CalendarDays, ChevronDown, Clock, Crosshair, FolderKanban, ImageIcon, Trash2, UserPlus, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 import type { SiteStatus } from "@/types/domain";
 
 export function SiteDetailView({ id }: { id: string }) {
-  const { sites, roster: crew, sessions, photos, events, setSiteStatus, deleteSite } = useLiveStore();
+  const { sites, projects, siteInventory, inventory, roster: crew, sessions, photos, events, setSiteStatus, setSiteProject, deleteSite } = useLiveStore();
   const now = useNow();
   const { openAddCrew } = useDialogs();
   const assign = useTarget();
@@ -91,6 +91,23 @@ export function SiteDetailView({ id }: { id: string }) {
   const assigned = crew.filter(c => c.siteIds.includes(site.id) && c.status !== "deactivated");
   const here = crew.filter(c => isOnShift(c) && c.currentSiteId === site.id);
   const gallery = data.photos.slice(0, 8);
+  const project = projects.find(value => value.id === site.projectId);
+  const hasProjectStock = siteInventory.some(allocation => allocation.siteId === site.id);
+  const changeProject = (projectId?: string) => {
+    if (hasProjectStock) {
+      toast.error("This site has project stock", { description: "It cannot move projects while it has inventory allocations. Move or close those allocations first." });
+      return;
+    }
+    if (projectId === site.projectId) return;
+    const nextName = projectId ? projects.find(value => value.id === projectId)?.name ?? "project" : "No project";
+    void attempt("Updating project", () => setSiteProject(site.id, projectId), {
+      targetType: "site",
+      targetId: site.id,
+      changes: describeChanges([{ label: "project", before: project?.name, after: nextName }]),
+    }).then(result => {
+      if (result) toast.success("Site project updated", { description: `${site.name} is now under ${nextName}.` });
+    });
+  };
 
   return (
     <>
@@ -134,6 +151,18 @@ export function SiteDetailView({ id }: { id: string }) {
                 </div>
                 <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5 font-mono text-xs">{site.code}</span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger render={<button type="button" className="inline-flex items-center gap-1.5 font-semibold text-primary outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Change project" />}>
+                      <FolderKanban className="size-4" /> {project?.name ?? "No project"} <ChevronDown className="size-3.5" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-56">
+                      <DropdownMenuRadioGroup value={site.projectId ?? "none"} onValueChange={value => changeProject(value === "none" ? undefined : value)}>
+                        <DropdownMenuRadioItem value="none">No project</DropdownMenuRadioItem>
+                        {projects.map(value => <DropdownMenuRadioItem key={value.id} value={value.id}>{value.name}</DropdownMenuRadioItem>)}
+                      </DropdownMenuRadioGroup>
+                      {hasProjectStock && <p className="px-2 py-1.5 text-xs text-muted-foreground">Inventory allocations lock this site to its current project.</p>}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   {site.manager && <span className="inline-flex items-center gap-1.5"><UserRound className="size-4" /> {site.manager}</span>}
                   <span className="inline-flex items-center gap-1.5"><CalendarDays className="size-4" /> Since {formatDate(site.startedAt)}</span>
                 </div>
@@ -291,11 +320,43 @@ export function SiteDetailView({ id }: { id: string }) {
           router.push("/sites");
         }}
       >
-        <p>
-          Removes the site and everything filed under it: its <b>photos</b> (file, thumbnail and record), <b>inventory entries</b>, <b>check-in sessions</b> and
-          <b> activity events</b>. It is also taken off every person&apos;s assigned sites.
-        </p>
-        <p>Anyone checked in there right now is not checked out on their phone.</p>
+        <div className="space-y-3">
+          {here.length > 0 && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-danger/30 bg-danger-soft p-2.5 text-xs text-danger font-semibold">
+              <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold">Active crew on shift: {here.length} {here.length === 1 ? "person" : "people"}</div>
+                <div className="mt-0.5 font-normal opacity-90">
+                  {here.map(c => c.name.split(" ")[0]).join(", ")} will be disconnected from this site on their mobile app immediately.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {siteInventory.some(a => a.siteId === site.id) && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning-soft p-2.5 text-xs text-warning-foreground font-semibold">
+              <Boxes className="size-4 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold">Active material stock allocations</div>
+                <div className="mt-0.5 font-normal opacity-90">
+                  Material stock allocated to this site will be removed and unreserved in the parent project.
+                </div>
+              </div>
+            </div>
+          )}
+
+          <p className="text-sm">
+            Please confirm that you want to permanently delete <b>{site.name}</b> and all of its associated records. This action is irreversible and will erase:
+          </p>
+
+          <ul className="list-disc pl-4 text-xs space-y-1 text-muted-foreground">
+            <li><b>{data.photos.length} geotagged site photos</b> (original image files and thumbnails in cloud storage will be permanently wiped)</li>
+            <li><b>{sessions.filter(s => s.siteId === site.id).length} check-in sessions & work hours</b></li>
+            <li><b>{inventory.filter(i => i.siteId === site.id).length} logged delivery & inventory entries</b></li>
+            <li><b>{data.events.length} activity feed records</b></li>
+            <li>Site assignments ({assigned.length} crew {assigned.length === 1 ? "member" : "members"} will have this site unassigned)</li>
+          </ul>
+        </div>
       </DeleteRecordDialog>
       <AssignCrewSheet key={assign.key} siteId={assign.id} open={assign.open} onOpenChange={assign.setOpen} />
       <DeletableLightbox photos={gallery} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />

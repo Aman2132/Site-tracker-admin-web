@@ -10,7 +10,8 @@ import type { AuditFields } from "./admin";
 import { failureReason, wasRefused } from "./auditLog";
 import { firebase } from "./firebase";
 import { toInventory } from "./inventory";
-import { deriveCrew, settleSessions, toEvent, toPhoto, toSite } from "./live";
+import { deriveCrew, settleSessions, toEvent, toPhoto, toProject, toSite } from "./live";
+import { toInventoryUsageRecord, toProjectInventoryItem, toSiteInventoryAllocation } from "./projectInventory";
 import { DAY, dayStart } from "./time";
 
 import type {
@@ -19,10 +20,14 @@ import type {
   AuditEntry,
   CrewMember,
   InventoryEntry,
+  InventoryUsageRecord,
   PersonDoc,
   PositionDoc,
   PresenceSession,
+  Project,
+  ProjectInventoryItem,
   Site,
+  SiteInventoryAllocation,
   SitePhoto,
 } from "@/types/domain";
 
@@ -52,6 +57,7 @@ interface LiveStore {
   /** Set when a listener fails (for instance rules not deployed), so the UI can say so. */
   error: string | null;
   sites: Site[];
+  projects: Project[];
   /** Everyone with a profile, admins included (for names, the Admins page, lookups). */
   crew: CrewMember[];
   /** The working crew: `crew` minus admin accounts. Every headcount and "on the roster" number uses this. */
@@ -60,16 +66,27 @@ interface LiveStore {
   photos: SitePhoto[];
   sessions: PresenceSession[];
   inventory: InventoryEntry[];
+  projectInventory: ProjectInventoryItem[];
+  siteInventory: SiteInventoryAllocation[];
+  inventoryUsage: InventoryUsageRecord[];
+  createProject: typeof admin.createProject;
+  addProjectStock: typeof admin.addProjectStock;
+  allocateProjectStock: typeof admin.allocateProjectStock;
+  recordInventoryUsage: typeof admin.recordInventoryUsage;
   createSite: typeof admin.createSite;
   setSiteStatus: typeof admin.setSiteStatus;
+  setProjectStatus: typeof admin.setProjectStatus;
+  setSiteProject: typeof admin.setSiteProject;
   setSiteCrew: typeof admin.setSiteCrew;
   setPersonSites: typeof admin.setPersonSites;
   setCrewActive: typeof admin.setCrewActive;
+  updatePersonDetails: typeof admin.updatePersonDetails;
   inviteCrew: typeof admin.inviteCrew;
   resendInvite: typeof admin.resendInvite;
   deletePhotos: typeof admin.deletePhotos;
   deletePerson: typeof admin.deletePerson;
   deleteSite: typeof admin.deleteSite;
+  deleteProject: typeof admin.deleteProject;
   addInventoryEntry: typeof admin.addInventoryEntry;
   updateInventoryEntry: typeof admin.updateInventoryEntry;
   deleteInventoryEntry: typeof admin.deleteInventoryEntry;
@@ -83,10 +100,14 @@ export function LiveStoreProvider({ children }: { children: ReactNode }) {
   const [people, setPeople] = useState<PersonDoc[] | null>(null);
   const [positions, setPositions] = useState<Record<string, PositionDoc> | null>(null);
   const [sites, setSites] = useState<Site[] | null>(null);
+  const [projects, setProjects] = useState<Project[] | null>(null);
   const [rawSessions, setRawSessions] = useState<PresenceSession[]>([]);
   const [photos, setPhotos] = useState<SitePhoto[]>([]);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [inventory, setInventory] = useState<InventoryEntry[]>([]);
+  const [projectInventory, setProjectInventory] = useState<ProjectInventoryItem[]>([]);
+  const [siteInventory, setSiteInventory] = useState<SiteInventoryAllocation[]>([]);
+  const [inventoryUsage, setInventoryUsage] = useState<InventoryUsageRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -124,6 +145,7 @@ export function LiveStoreProvider({ children }: { children: ReactNode }) {
           ),
         fail("sites")
       ),
+      onSnapshot(collection(db, "projects"), snap => setProjects(snap.docs.map(d => toProject(d.id, d.data(), Date.now()))), fail("projects")),
       onSnapshot(
         query(collection(db, "sessions"), where("start", ">=", since), orderBy("start", "desc")),
         snap =>
@@ -150,6 +172,9 @@ export function LiveStoreProvider({ children }: { children: ReactNode }) {
         snap => setInventory(snap.docs.map(d => toInventory(d.id, d.data()))),
         fail("inventory")
       ),
+      onSnapshot(collection(db, "projectInventory"), snap => setProjectInventory(snap.docs.map(d => toProjectInventoryItem(d.id, d.data()))), fail("project inventory")),
+      onSnapshot(collection(db, "siteInventory"), snap => setSiteInventory(snap.docs.map(d => toSiteInventoryAllocation(d.id, d.data()))), fail("site inventory")),
+      onSnapshot(query(collection(db, "inventoryUsage"), orderBy("at", "desc"), limit(INVENTORY_LIMIT)), snap => setInventoryUsage(snap.docs.map(d => toInventoryUsageRecord(d.id, d.data()))), fail("inventory usage")),
     ];
     return () => unsubscribers.forEach(unsubscribe => unsubscribe());
   }, []);
@@ -164,35 +189,47 @@ export function LiveStoreProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<LiveStore>(
     () => ({
-      ready: people != null && positions != null && sites != null,
+      ready: people != null && positions != null && sites != null && projects != null,
       now,
       error,
       sites: sites ?? [],
+      projects: projects ?? [],
       crew,
       roster,
       events,
       photos,
       sessions,
       inventory,
+      projectInventory,
+      siteInventory,
+      inventoryUsage,
       ...ACTIONS,
     }),
-    [people, positions, sites, now, error, crew, roster, events, photos, sessions, inventory]
+    [people, positions, sites, projects, now, error, crew, roster, events, photos, sessions, inventory, projectInventory, siteInventory, inventoryUsage]
   );
 
   return <LiveStoreContext.Provider value={value}>{children}</LiveStoreContext.Provider>;
 }
 
 const ACTIONS = {
+  createProject: admin.createProject,
+  addProjectStock: admin.addProjectStock,
+  allocateProjectStock: admin.allocateProjectStock,
+  recordInventoryUsage: admin.recordInventoryUsage,
   createSite: admin.createSite,
   setSiteStatus: admin.setSiteStatus,
+  setProjectStatus: admin.setProjectStatus,
+  setSiteProject: admin.setSiteProject,
   setSiteCrew: admin.setSiteCrew,
   setPersonSites: admin.setPersonSites,
   setCrewActive: admin.setCrewActive,
+  updatePersonDetails: admin.updatePersonDetails,
   inviteCrew: admin.inviteCrew,
   resendInvite: admin.resendInvite,
   deletePhotos: admin.deletePhotos,
   deletePerson: admin.deletePerson,
   deleteSite: admin.deleteSite,
+  deleteProject: admin.deleteProject,
   addInventoryEntry: admin.addInventoryEntry,
   updateInventoryEntry: admin.updateInventoryEntry,
   deleteInventoryEntry: admin.deleteInventoryEntry,

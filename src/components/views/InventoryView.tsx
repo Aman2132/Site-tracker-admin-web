@@ -1,7 +1,7 @@
 "use client";
 
 import { describeChanges, describeFields } from "@/lib/auditLog";
-import { Building2, Camera, ChevronRight, Download, MoreHorizontal, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Building2, Camera, ChevronRight, Download, MoreHorizontal, Package, Pencil, Search, Trash2, X } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -267,8 +267,8 @@ export function InventoryView() {
   return (
     <>
       <PageHeader
-        title="Inventory"
-        description="Everything the crew logged as received on site. Totals add up per item and unit; correct or remove any entry."
+        title="Legacy inventory records"
+        description="Historical deliveries remain here. Add new project stock and allocate it to sites from Projects so site limits are enforced."
         actions={
           <>
             <DropdownMenu>
@@ -288,9 +288,6 @@ export function InventoryView() {
             </DropdownMenu>
             <Button variant="outline" size="lg" className="bg-card" onClick={exportCsv} disabled={filtered.length === 0}>
               <Download /> Export CSV
-            </Button>
-            <Button size="lg" onClick={() => setEditing(null)} disabled={sites.length === 0}>
-              <Plus /> Add item
             </Button>
           </>
         }

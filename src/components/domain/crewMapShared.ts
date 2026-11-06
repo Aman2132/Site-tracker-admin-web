@@ -1,11 +1,13 @@
 import { timeAgo } from "@/lib/format";
 
-import type { CrewMember, PresenceStatus, Site } from "@/types/domain";
+import type { CrewMember, PresenceStatus, Site, SitePhoto } from "@/types/domain";
 
 /** What every map implementation takes. */
 export interface CrewMapProps {
   crew: CrewMember[];
   sites: Site[];
+  photos?: SitePhoto[];
+  onSelectPhoto?: (photo: SitePhoto) => void;
   /** The map frames the pins once per key (so a new site filter re-frames it), then leaves the view alone. */
   fitKey: string;
   /** Flies to and opens this person's pin. */
@@ -86,8 +88,64 @@ export function popupFor(person: CrewMember, siteNames: string[]): HTMLElement {
   };
   line(person.name, true);
   line(`${person.jobTitle} · ${person.status}`);
+  if (person.email) line(person.email);
+  if (person.phone) line(person.phone);
   if (siteNames.length) line(siteNames.join(", "));
   line(`Updated ${timeAgo(person.lastSeenAt)}`);
   if (person.accuracy != null) line(`GPS ±${Math.round(person.accuracy)} m`);
   return root;
 }
+
+/** Circular photo thumbnail pin element for interactive maps. */
+export function photoPinElement(photo: SitePhoto): HTMLElement {
+  const root = document.createElement("div");
+  Object.assign(root.style, {
+    width: "36px",
+    height: "44px",
+    position: "relative",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    cursor: "pointer",
+  });
+
+  const circle = document.createElement("div");
+  Object.assign(circle.style, {
+    width: "36px",
+    height: "36px",
+    borderRadius: "50%",
+    border: "2.5px solid #ffffff",
+    boxShadow: "0 3px 10px rgba(0,0,0,0.38)",
+    overflow: "hidden",
+    background: "#111",
+    position: "relative",
+    zIndex: "2",
+  });
+
+  const img = document.createElement("img");
+  img.src = photo.thumbUrl;
+  img.alt = photo.task || "Site photo";
+  Object.assign(img.style, {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+  });
+  circle.appendChild(img);
+  root.appendChild(circle);
+
+  const tip = document.createElement("div");
+  Object.assign(tip.style, {
+    width: "8px",
+    height: "8px",
+    background: "#ffffff",
+    transform: "rotate(45deg)",
+    marginTop: "-5px",
+    boxShadow: "1px 1px 3px rgba(0,0,0,0.3)",
+    zIndex: "1",
+  });
+  root.appendChild(tip);
+
+  return root;
+}
+

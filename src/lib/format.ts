@@ -91,3 +91,18 @@ export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n ==
 /** The dashboard calls owners "Admin". */
 export const roleLabel = (role: "owner" | "worker" | "superadmin") =>
   role === "superadmin" ? "Superadmin" : role === "owner" ? "Admin" : "Worker";
+
+/** Compass cardinal abbreviation from azimuth degrees (0-360). */
+export function headingToCompass(deg: number): string {
+  const directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+  const index = Math.round((((deg % 360) + 360) % 360) / 22.5) % 16;
+  return directions[index];
+}
+
+/** Formats altitude in metres and feet above sea level. */
+export function formatAltitude(meters: number): string {
+  const m = Math.round(meters);
+  const ft = Math.round(meters * 3.28084);
+  return `${m.toLocaleString()} m (${ft.toLocaleString()} ft) ASL`;
+}
+

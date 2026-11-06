@@ -1,4 +1,4 @@
-import { AGE_CHOICES, chunk, cutoffFor, findOrphans, sumBytes, type CleanupPreview, type CleanupResult } from "@/lib/cleanup";
+import { chunk, cutoffFor, findOrphans, sumBytes, type CleanupPreview, type CleanupResult } from "@/lib/cleanup";
 import { filesOf } from "@/lib/photoFiles";
 import { deletePhotoCompletely, queryPhotoRecords, referencedPaths } from "@/lib/photoServer";
 import { HttpError, requireSuperadmin } from "@/lib/serverAuth";
@@ -24,6 +24,9 @@ interface Body {
   kind?: unknown;
   mode?: unknown;
   olderThanDays?: unknown;
+  beforeMs?: unknown;
+  afterMs?: unknown;
+  scopeLabel?: unknown;
 }
 
 export async function POST(request: Request) {
@@ -39,20 +42,41 @@ export async function POST(request: Request) {
     const mode = body?.mode;
     if (kind !== "photos" && kind !== "orphans") throw new HttpError(400, "Unknown cleanup.");
     if (mode !== "preview" && mode !== "run") throw new HttpError(400, "Unknown mode.");
-    let days: number | null = null;
+    let before: number | null = null;
+    let afterMs: number | undefined = undefined;
+    let scopeLabel: string | null = null;
+    let olderDays: number | null = null;
+
     if (kind === "photos") {
-      days = Number(body?.olderThanDays);
-      // Only the offered ages: a typo must not be able to wipe recent photos.
-      if (!AGE_CHOICES.includes(days)) throw new HttpError(400, `Choose one of: ${AGE_CHOICES.join(", ")} days.`);
+      if (body?.beforeMs != null) {
+        before = Number(body.beforeMs);
+        if (isNaN(before) || before > Date.now() + 60000) {
+          throw new HttpError(400, "Invalid date cutoff.");
+        }
+        if (body?.afterMs != null) {
+          afterMs = Number(body.afterMs);
+          if (isNaN(afterMs) || afterMs > before) {
+            throw new HttpError(400, "Invalid date range: start cannot be after end.");
+          }
+        }
+        scopeLabel = typeof body?.scopeLabel === "string" ? body.scopeLabel : null;
+      } else {
+        olderDays = Number(body?.olderThanDays);
+        if (isNaN(olderDays) || olderDays <= 0) {
+          throw new HttpError(400, `Choose an age or date cutoff.`);
+        }
+        before = cutoffFor(olderDays, Date.now());
+        scopeLabel = `older than ${olderDays} days`;
+      }
     }
 
     const now = Date.now();
     const ctx = { idToken, serviceKey, now };
-    const preview = kind === "photos" ? await previewPhotos(ctx, days!) : await previewOrphans(ctx);
+    const preview = kind === "photos" ? await previewPhotos(ctx, { before: before!, after: afterMs, olderDays, scopeLabel }) : await previewOrphans(ctx);
     if (mode === "preview") return Response.json({ preview });
 
-    const { deleted, failed } = kind === "photos" ? await runPhotos(ctx, days!) : await runOrphans(ctx);
-    const after = kind === "photos" ? await previewPhotos(ctx, days!) : await previewOrphans(ctx);
+    const { deleted, failed } = kind === "photos" ? await runPhotos(ctx, { before: before!, after: afterMs }) : await runOrphans(ctx);
+    const after = kind === "photos" ? await previewPhotos(ctx, { before: before!, after: afterMs, olderDays, scopeLabel }) : await previewOrphans(ctx);
     const result: CleanupResult = { kind, deleted, failed, remaining: after.count };
     return Response.json({ result });
   } catch (error) {
@@ -68,14 +92,30 @@ interface Ctx {
   now: number;
 }
 
-async function previewPhotos({ idToken, serviceKey, now }: Ctx, days: number): Promise<CleanupPreview> {
-  const records = await queryPhotoRecords(idToken, { before: cutoffFor(days, now), limit: SCAN_LIMIT });
+interface PhotoScope {
+  before: number;
+  after?: number;
+  olderDays?: number | null;
+  scopeLabel?: string | null;
+}
+
+async function previewPhotos({ idToken, serviceKey }: Ctx, scope: PhotoScope): Promise<CleanupPreview> {
+  const records = await queryPhotoRecords(idToken, { before: scope.before, after: scope.after, limit: SCAN_LIMIT });
   const sizes = new Map((await listBucketFiles(serviceKey)).map(file => [file.path, file.size]));
   const bytes = records.reduce(
     (sum, record) => sum + filesOf({ fullUrl: record.fullUrl, thumbUrl: record.thumbUrl }).reduce((n, path) => n + (sizes.get(path) ?? 0), 0),
     0
   );
-  return { kind: "photos", olderThanDays: days, count: records.length, bytes, bytesExact: true };
+  return {
+    kind: "photos",
+    olderThanDays: scope.olderDays ?? null,
+    beforeMs: scope.before,
+    afterMs: scope.after ?? null,
+    scopeLabel: scope.scopeLabel ?? null,
+    count: records.length,
+    bytes,
+    bytesExact: true,
+  };
 }
 
 /** The files nothing points to. Refuses outright if the records can't be matched to the store at all. */
@@ -95,8 +135,8 @@ async function previewOrphans(ctx: Ctx): Promise<CleanupPreview> {
   return { kind: "orphans", olderThanDays: null, count: orphans.length, bytes: sumBytes(orphans), bytesExact: true };
 }
 
-async function runPhotos({ idToken, serviceKey, now }: Ctx, days: number) {
-  const batch = await queryPhotoRecords(idToken, { before: cutoffFor(days, now), limit: BATCH });
+async function runPhotos({ idToken, serviceKey }: Ctx, scope: { before: number; after?: number }) {
+  const batch = await queryPhotoRecords(idToken, { before: scope.before, after: scope.after, limit: BATCH });
   const deleted = { count: 0 };
   const failed: { id: string; reason: string }[] = [];
   for (const record of batch) {

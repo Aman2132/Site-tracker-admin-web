@@ -13,6 +13,22 @@ export type CleanupKind = "photos" | "orphans" | "events" | "sessions" | "invent
 export const AGE_CHOICES = [30, 90, 180, 365];
 export const DEFAULT_AGE_DAYS = 90;
 
+export interface CleanupScope {
+  beforeMs: number;
+  afterMs?: number;
+  label: string;
+}
+
+export const CLEANUP_PRESETS = [
+  { id: "1h", label: "1 hour", ms: 60 * 60 * 1000 },
+  { id: "1d", label: "24 hours", ms: 24 * 60 * 60 * 1000 },
+  { id: "7d", label: "7 days", ms: 7 * DAY },
+  { id: "30d", label: "30 days", ms: 30 * DAY },
+  { id: "90d", label: "90 days", ms: 90 * DAY },
+  { id: "180d", label: "180 days", ms: 180 * DAY },
+  { id: "365d", label: "1 year", ms: 365 * DAY },
+] as const;
+
 /** A file must be at least this old before it can be called an orphan: an upload in progress writes the file before its record. */
 export const MIN_ORPHAN_AGE_MS = 60 * 60 * 1000;
 
@@ -37,7 +53,7 @@ export interface KindInfo {
 export const KIND_INFO: Record<CleanupKind, KindInfo> = {
   photos: {
     title: "Old photos",
-    removes: "Photos taken before the chosen age: the original file, its thumbnail AND the Firestore record.",
+    removes: "Photos older than the chosen age: deletes the original file, thumbnail, and Firestore record. Recent photos are kept safe.",
     loses: "The photos are gone for good, including from the crew's own photo lists once they refresh. This cannot be undone.",
     usesAge: true,
     frees: "photo files",
@@ -105,6 +121,9 @@ export function chunk<T>(list: T[], size: number): T[][] {
 export interface CleanupPreview {
   kind: CleanupKind;
   olderThanDays: number | null;
+  beforeMs?: number | null;
+  afterMs?: number | null;
+  scopeLabel?: string | null;
   /** How many records (or files) would be deleted. */
   count: number;
   /** Space freed: exact for files, estimated for Firestore documents; null when unknown. */
@@ -121,8 +140,13 @@ export interface CleanupResult {
 }
 
 /** One line for the audit trail, e.g. "Cleanup: deleted 142 old photos (older than 90 days) — 38 MB". */
-export function auditLine(result: CleanupResult, olderThanDays: number | null, bytesLabel: string | null): string {
+export function auditLine(result: CleanupResult, scope: number | string | null, bytesLabel: string | null): string {
   const what = KIND_INFO[result.kind].title.toLowerCase();
-  const age = olderThanDays != null ? ` (older than ${olderThanDays} days)` : "";
+  let age = "";
+  if (typeof scope === "number") {
+    age = ` (older than ${scope} days)`;
+  } else if (typeof scope === "string" && scope) {
+    age = ` (${scope})`;
+  }
   return `Cleanup: deleted ${result.deleted} ${what}${age}${bytesLabel ? ` — ${bytesLabel}` : ""}`;
 }
