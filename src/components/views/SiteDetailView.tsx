@@ -1,7 +1,7 @@
 "use client";
 
 import { describeChanges } from "@/lib/auditLog";
-import { ArrowLeft, Building2, CalendarDays, ChevronDown, Clock, Crosshair, FolderKanban, ImageIcon, Trash2, UserPlus, UserRound, Users } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Boxes, Building2, CalendarDays, ChevronDown, Clock, Crosshair, FolderKanban, ImageIcon, Trash2, UserPlus, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 import type { SiteStatus } from "@/types/domain";
 
 export function SiteDetailView({ id }: { id: string }) {
-  const { sites, projects, siteInventory, roster: crew, sessions, photos, events, setSiteStatus, setSiteProject, deleteSite } = useLiveStore();
+  const { sites, projects, siteInventory, inventory, roster: crew, sessions, photos, events, setSiteStatus, setSiteProject, deleteSite } = useLiveStore();
   const now = useNow();
   const { openAddCrew } = useDialogs();
   const assign = useTarget();
@@ -320,11 +320,43 @@ export function SiteDetailView({ id }: { id: string }) {
           router.push("/sites");
         }}
       >
-        <p>
-          Removes the site and everything filed under it: its <b>photos</b> (file, thumbnail and record), <b>inventory entries</b>, <b>check-in sessions</b> and
-          <b> activity events</b>. It is also taken off every person&apos;s assigned sites.
-        </p>
-        <p>Anyone checked in there right now is not checked out on their phone.</p>
+        <div className="space-y-3">
+          {here.length > 0 && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-danger/30 bg-danger-soft p-2.5 text-xs text-danger font-semibold">
+              <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold">Active crew on shift: {here.length} {here.length === 1 ? "person" : "people"}</div>
+                <div className="mt-0.5 font-normal opacity-90">
+                  {here.map(c => c.name.split(" ")[0]).join(", ")} will be disconnected from this site on their mobile app immediately.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {siteInventory.some(a => a.siteId === site.id) && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning-soft p-2.5 text-xs text-warning-foreground font-semibold">
+              <Boxes className="size-4 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold">Active material stock allocations</div>
+                <div className="mt-0.5 font-normal opacity-90">
+                  Material stock allocated to this site will be removed and unreserved in the parent project.
+                </div>
+              </div>
+            </div>
+          )}
+
+          <p className="text-sm">
+            Please confirm that you want to permanently delete <b>{site.name}</b> and all of its associated records. This action is irreversible and will erase:
+          </p>
+
+          <ul className="list-disc pl-4 text-xs space-y-1 text-muted-foreground">
+            <li><b>{data.photos.length} geotagged site photos</b> (original image files and thumbnails in cloud storage will be permanently wiped)</li>
+            <li><b>{sessions.filter(s => s.siteId === site.id).length} check-in sessions & work hours</b></li>
+            <li><b>{inventory.filter(i => i.siteId === site.id).length} logged delivery & inventory entries</b></li>
+            <li><b>{data.events.length} activity feed records</b></li>
+            <li>Site assignments ({assigned.length} crew {assigned.length === 1 ? "member" : "members"} will have this site unassigned)</li>
+          </ul>
+        </div>
       </DeleteRecordDialog>
       <AssignCrewSheet key={assign.key} siteId={assign.id} open={assign.open} onOpenChange={assign.setOpen} />
       <DeletableLightbox photos={gallery} openId={openPhoto} onClose={() => setOpenPhoto(null)} onChange={setOpenPhoto} />

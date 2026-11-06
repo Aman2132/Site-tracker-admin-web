@@ -52,6 +52,24 @@ export const availableToAllocate = (item: Pick<ProjectInventoryItem, "quantity" 
 export const availableAtSite = (allocation: Pick<SiteInventoryAllocation, "quantity" | "usedQuantity">) =>
   Math.max(0, allocation.quantity - allocation.usedQuantity);
 
+export type StockLevel = "out" | "critical" | "low" | "ok";
+
+export interface StockAlert {
+  level: StockLevel;
+  percent: number;
+  label: string;
+}
+
+/** Evaluates stock health for project stock and site allocations. */
+export function getStockAlert(total: number, available: number): StockAlert {
+  if (total <= 0) return { level: "ok", percent: 100, label: "No stock set" };
+  const percent = Math.round((Math.max(0, available) / total) * 100);
+  if (available <= 0) return { level: "out", percent: 0, label: "Out of stock" };
+  if (percent <= 10) return { level: "critical", percent, label: `Critical (${percent}% left)` };
+  if (percent <= 25) return { level: "low", percent, label: `Low stock (${percent}% left)` };
+  return { level: "ok", percent, label: `${percent}% available` };
+}
+
 /** A human-readable refusal that keeps the allocation limit visible to the user. */
 export function usageProblem(available: number, requested: number): string | null {
   if (!Number.isFinite(requested) || requested <= 0) return "Usage must be a number above 0.";

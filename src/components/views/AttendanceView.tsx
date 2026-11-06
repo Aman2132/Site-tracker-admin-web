@@ -1,7 +1,7 @@
 "use client";
 
 import { describeFields } from "@/lib/auditLog";
-import { AlarmClock, Building2, CalendarRange, Download, Timer, TriangleAlert, UserCheck, WifiOff } from "lucide-react";
+import { AlarmClock, Building2, CalendarRange, ChevronDown, Download, Timer, TriangleAlert, UserCheck, WifiOff } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -17,12 +17,14 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDay, formatDayMonth, formatHours, formatTime, formatWeekday } from "@/lib/format";
+import { downloadTimesheetCsv } from "@/lib/timesheetExport";
 import { MIN_SHIFT_MS, attendanceFor, lastNDays, type AttendanceCell } from "@/lib/insights";
 import { HOUR, dayStart } from "@/lib/time";
 import { logAction, useLiveStore, useLookups, useNow } from "@/lib/store";
@@ -144,17 +146,26 @@ export function AttendanceView() {
     };
   }, [rows]);
 
-  const exportCsv = () => {
-    const header = ["Name", ...days.map(d => formatDayMonth(d)), "Total"].join(",");
-    const body = rows.map(r => [r.person.name, ...r.cells.map(c => (c.workedMs / HOUR).toFixed(2)), (r.total / HOUR).toFixed(2)].join(","));
-    const url = URL.createObjectURL(new Blob([[header, ...body].join("\n")], { type: "text/csv" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "attendance.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-    logAction("Exported attendance CSV", { kind: "export", changes: describeFields([{ label: "people", value: rows.length }, { label: "days", value: days.length }]) });
-    toast.success("Timesheet exported", { description: `${rows.length} people × ${days.length} days · attendance.csv` });
+  const handleExport = (exportDays: number[], rangeLabel: string) => {
+    const res = downloadTimesheetCsv({
+      crew: people,
+      sessions,
+      sites,
+      days: exportDays,
+      siteId: site,
+    });
+    logAction("Exported attendance CSV", {
+      kind: "export",
+      changes: describeFields([
+        { label: "people", value: people.length },
+        { label: "days", value: exportDays.length },
+        { label: "site", value: site === "all" ? "All sites" : siteById.get(site)?.name ?? site },
+        { label: "range", value: rangeLabel },
+      ]),
+    });
+    toast.success("Timesheet CSV exported", {
+      description: `${people.length} workers · ${exportDays.length} days (${res.totalHours} total hours).`,
+    });
   };
 
   return (
@@ -163,9 +174,43 @@ export function AttendanceView() {
         title="Attendance"
         description="When each person was online and offline, built from their location-sharing sessions — hours, late arrivals and dropped signals."
         actions={
-          <Button size="lg" className="rounded-xl px-4 shadow-glow" onClick={exportCsv}>
-            <Download /> Export timesheet
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="lg"
+              className="rounded-xl px-4 shadow-glow"
+              onClick={() => handleExport(days, `${span} days`)}
+            >
+              <Download /> Export timesheet ({span}d)
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="rounded-xl px-2.5 bg-card"
+                    aria-label="More export date ranges"
+                  />
+                }
+              >
+                <ChevronDown className="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={() => handleExport(days, `Current view (${span} days)`)}>
+                  Current view ({span} days)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport(lastNDays(7), "Last 7 days")}>
+                  Last 7 days (weekly payroll)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport(lastNDays(14), "Last 14 days")}>
+                  Last 14 days (bi-weekly)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport(lastNDays(30), "Last 30 days")}>
+                  Last 30 days (monthly)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         }
       />
 

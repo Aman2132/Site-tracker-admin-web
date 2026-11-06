@@ -311,6 +311,10 @@ export async function setSiteStatus(siteId: string, status: SiteStatus): Promise
   await updateDoc(doc(firebase().db, "sites", siteId), { status });
 }
 
+export async function setProjectStatus(projectId: string, status: SiteStatus): Promise<void> {
+  await updateDoc(doc(firebase().db, "projects", projectId), { status });
+}
+
 /** Moves an unallocated site to a project, or clears its project for legacy sites. */
 export async function setSiteProject(siteId: string, projectId?: string): Promise<void> {
   await updateDoc(doc(firebase().db, "sites", siteId), { projectId: projectId || deleteField() });
@@ -492,6 +496,24 @@ export const deletePerson = (id: string): Promise<void> => postDelete("/api/peop
  * Done on the server (/api/sites/delete).
  */
 export const deleteSite = (id: string): Promise<void> => postDelete("/api/sites/delete", id);
+
+/**
+ * 🚨 Superadmin only. Deletes a project. If deleteSites is true, all attached sites
+ * and their contents are deleted. If false, sites are detached and kept independent.
+ */
+export async function deleteProject(id: string, deleteSites: boolean): Promise<void> {
+  const user = firebase().auth.currentUser;
+  if (!user) throw new Error("Sign in again.");
+  const response = await fetch("/api/projects/delete", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${await user.getIdToken()}` },
+    body: JSON.stringify({ id, deleteSites }),
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `Deleting failed (${response.status}).`);
+  }
+}
 
 /**
  * Corrects an entry the crew logged. Stamps who changed it and when, which the

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { attendanceFor, collapseRepeats, hoursOnDay, overlappingSessionIds } from "./insights.ts";
 import { deriveCrew, settleSessions, toEvent, toPhoto } from "./live.ts";
 import { filesOf, storagePathFromUrl } from "./photoFiles.ts";
-import { canAttachSiteToProject, projectNameProblem, siteNameProblem } from "./projectInventory.ts";
+import { canAttachSiteToProject, getStockAlert, projectNameProblem, siteNameProblem } from "./projectInventory.ts";
 import { DAY, HOUR, MINUTE, TZ_OFFSET, dayStart, fromLocalInput, sessionTimesProblem, toLocalInput } from "./time.ts";
 
 const NOW = Date.UTC(2026, 9, 5, 10, 0);
@@ -430,4 +430,12 @@ test("project and site names must be unique ignoring case and extra whitespace, 
   assert.equal(canAttachSiteToProject(existingSites[0], "pr1"), true);
   assert.equal(canAttachSiteToProject(existingSites[1]), true);
   assert.equal(canAttachSiteToProject(existingSites[1], "pr2"), true);
+});
+
+test("stock alerts distinguish out of stock, critical, low stock and healthy levels", () => {
+  assert.deepEqual(getStockAlert(100, 0), { level: "out", percent: 0, label: "Out of stock" });
+  assert.deepEqual(getStockAlert(100, -5), { level: "out", percent: 0, label: "Out of stock" });
+  assert.deepEqual(getStockAlert(100, 8), { level: "critical", percent: 8, label: "Critical (8% left)" });
+  assert.deepEqual(getStockAlert(100, 20), { level: "low", percent: 20, label: "Low stock (20% left)" });
+  assert.deepEqual(getStockAlert(100, 75), { level: "ok", percent: 75, label: "75% available" });
 });

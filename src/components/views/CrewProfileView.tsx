@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarDays,
   Clock,
+  Download,
   CopyX,
   Crosshair,
   ImageIcon,
@@ -43,6 +44,7 @@ import { CountUp, Stagger, StaggerItem } from "@/components/motion";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { formatClock, formatDate, formatDateTime, formatDay, formatHours, formatTime, formatWeekday, hourOfDay, roleLabel, timeAgo } from "@/lib/format";
 import { attendanceFor, isOnShift, lastNDays, overlappingSessionIds } from "@/lib/insights";
+import { downloadCrewTimesheetCsv } from "@/lib/timesheetExport";
 import { HOUR } from "@/lib/time";
 import { attempt, useLiveStore, useNow } from "@/lib/store";
 import { useTarget } from "@/lib/useTarget";
@@ -157,6 +159,15 @@ export function CrewProfileView({ id }: { id: string }) {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="lg" className="rounded-xl bg-card" onClick={() => {
+                  const days30 = lastNDays(30);
+                  const res = downloadCrewTimesheetCsv({ person, sessions, sites, days: days30 });
+                  toast.success(`Timesheet exported for ${person.name}`, {
+                    description: `Last 30 days (${res.totalHours} total hours logged).`,
+                  });
+                }}>
+                  <Download className="size-4" /> Export timesheet
+                </Button>
                 <Button variant="outline" size="lg" className="rounded-xl" onClick={() => setEditingProfile(true)}>
                   <Pencil /> Edit details
                 </Button>

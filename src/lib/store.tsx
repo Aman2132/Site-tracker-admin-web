@@ -75,6 +75,7 @@ interface LiveStore {
   recordInventoryUsage: typeof admin.recordInventoryUsage;
   createSite: typeof admin.createSite;
   setSiteStatus: typeof admin.setSiteStatus;
+  setProjectStatus: typeof admin.setProjectStatus;
   setSiteProject: typeof admin.setSiteProject;
   setSiteCrew: typeof admin.setSiteCrew;
   setPersonSites: typeof admin.setPersonSites;
@@ -85,6 +86,7 @@ interface LiveStore {
   deletePhotos: typeof admin.deletePhotos;
   deletePerson: typeof admin.deletePerson;
   deleteSite: typeof admin.deleteSite;
+  deleteProject: typeof admin.deleteProject;
   addInventoryEntry: typeof admin.addInventoryEntry;
   updateInventoryEntry: typeof admin.updateInventoryEntry;
   deleteInventoryEntry: typeof admin.deleteInventoryEntry;
@@ -216,6 +218,7 @@ const ACTIONS = {
   recordInventoryUsage: admin.recordInventoryUsage,
   createSite: admin.createSite,
   setSiteStatus: admin.setSiteStatus,
+  setProjectStatus: admin.setProjectStatus,
   setSiteProject: admin.setSiteProject,
   setSiteCrew: admin.setSiteCrew,
   setPersonSites: admin.setPersonSites,
@@ -226,6 +229,7 @@ const ACTIONS = {
   deletePhotos: admin.deletePhotos,
   deletePerson: admin.deletePerson,
   deleteSite: admin.deleteSite,
+  deleteProject: admin.deleteProject,
   addInventoryEntry: admin.addInventoryEntry,
   updateInventoryEntry: admin.updateInventoryEntry,
   deleteInventoryEntry: admin.deleteInventoryEntry,
